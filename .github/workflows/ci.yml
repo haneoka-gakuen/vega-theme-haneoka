@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: vega-theme-haneoka
+      - uses: actions/checkout@v7
+        with:
+          repository: haneoka-gakuen/vega
+          path: vega-theme-haneoka/.dependencies/vega
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.14.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: vega-theme-haneoka/pnpm-lock.yaml
+      - working-directory: vega-theme-haneoka
+        run: pnpm install --frozen-lockfile
+      - working-directory: vega-theme-haneoka
+        run: pnpm --filter @haneoka/vega-protocol build && pnpm --filter @haneoka/vega build:core
+      - working-directory: vega-theme-haneoka
+        run: pnpm check
+      - working-directory: vega-theme-haneoka
+        run: pnpm pack --dry-run
