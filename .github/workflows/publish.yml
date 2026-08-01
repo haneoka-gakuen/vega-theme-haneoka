@@ -44,6 +44,8 @@ jobs:
       - working-directory: vega-theme-haneoka
         run: pnpm --filter @haneoka/vega-protocol build && pnpm --filter @haneoka/vega build:core
       - working-directory: vega-theme-haneoka
+        run: pnpm --filter @haneoka/vega-plugin-richtext build
+      - working-directory: vega-theme-haneoka
         run: pnpm check
       - working-directory: vega-theme-haneoka
         env:
