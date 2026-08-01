@@ -20,6 +20,11 @@ jobs:
         with:
           repository: haneoka-gakuen/vega
           path: vega-theme-haneoka/.dependencies/vega
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: haneoka-gakuen/vega-plugin-richtext
+          path: vega-theme-haneoka/.dependencies/vega-plugin-richtext
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
         with:
           version: 11.14.0
