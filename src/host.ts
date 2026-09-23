@@ -1,10 +1,6 @@
-import {
-  defineVegaPlugin,
-  defineVegaService,
-  type VegaDisposable,
-  type VegaPlugin,
-} from "@haneoka/vega/plugin";
+import { defineVegaPlugin, defineVegaService, type VegaDisposable, type VegaPlugin } from "@haneoka/vega/plugin";
 import type { StoryChatIconSprites } from "@haneoka/vega/runtime";
+import { bundledHaneokaChatSource } from "./chatAssets.js";
 
 export interface HaneokaThemeAssets {
   readonly arrow?: string;
@@ -12,7 +8,9 @@ export interface HaneokaThemeAssets {
   /** Optional host-owned phone frame and conversation background. */
   readonly chatWindow?: string;
   readonly chatBackground?: string;
+  readonly chatBackgroundFallback?: string;
   readonly chatLock?: string;
+  readonly chatTextBox?: string;
   readonly chatComposerPlus?: string;
   readonly chatComposerPhoto?: string;
   readonly chatComposerPicture?: string;
@@ -27,6 +25,7 @@ export interface HaneokaThemeAssets {
   readonly frame?: string;
   readonly fullscreen?: string;
   readonly subtitles?: string;
+  readonly skip?: string;
 }
 
 export interface HaneokaThemeHostSnapshot {
@@ -47,7 +46,39 @@ export interface HaneokaThemeHostSnapshot {
   readonly progressLabel?: string;
 }
 
-export interface HaneokaThemeHost {
+export interface HaneokaThemeAssetProvider {
+  assets?(): HaneokaThemeAssets;
+  resolveChatImage?(value: string, kind: "icon" | "stamp"): string;
+  resolveSourceAsset?(path: string): string;
+}
+
+export const HANEOKA_THEME_ASSETS = defineVegaService<HaneokaThemeAssetProvider>("haneoka.theme-assets.v1");
+
+export const resolveHaneokaSourceAsset = (provider: HaneokaThemeAssetProvider | undefined, path: string): string => {
+  if (!path) return "";
+  try {
+    const resolved = provider?.resolveSourceAsset?.(path);
+    if (resolved) return resolved;
+  } catch {
+    /* Use the bundled theme resource when no host resource resolves. */
+  }
+  return bundledHaneokaChatSource(path);
+};
+
+export const createHaneokaThemeAssetsPlugin = (provider: HaneokaThemeAssetProvider): VegaPlugin =>
+  defineVegaPlugin({
+    manifest: {
+      id: "haneoka.theme-assets",
+      name: "Haneoka Theme Assets",
+      version: "0.1.0",
+      apiVersion: 1,
+    },
+    setup(context) {
+      context.provide(HANEOKA_THEME_ASSETS, provider);
+    },
+  });
+
+export interface HaneokaThemeHost extends HaneokaThemeAssetProvider {
   readonly labels?: Readonly<Record<string, string>>;
   /**
    * The application renders its own transport using its shared playback
@@ -55,21 +86,8 @@ export interface HaneokaThemeHost {
    * mount a second transport.
    */
   readonly externalPlaybackControls?: boolean;
-  assets?(): HaneokaThemeAssets;
-  /**
-   * Resolves a scenario-owned chat icon or stamp without coupling this public
-   * plugin to one game's asset namespace.
-   */
-  resolveChatImage?(value: string, kind: "icon" | "stamp"): string;
-  /**
-   * Resolves one canonical source-asset path inside the host's active release.
-   * The public theme only carries path metadata and never bundles those files.
-   */
-  resolveSourceAsset?(path: string): string;
   snapshot(): HaneokaThemeHostSnapshot;
-  subscribe(
-    listener: (snapshot: HaneokaThemeHostSnapshot) => void,
-  ): VegaDisposable;
+  subscribe(listener: (snapshot: HaneokaThemeHostSnapshot) => void): VegaDisposable;
   toggleAutoAdvance(): void;
   setInstantText(value: boolean): void;
   setSubtitlesEnabled(value: boolean): void;
@@ -90,21 +108,16 @@ export interface HaneokaThemeHost {
  * Optional host adapter for licensed images and application-owned settings.
  * The public theme remains fully functional when this service is absent.
  */
-export const HANEOKA_THEME_HOST = defineVegaService<HaneokaThemeHost>(
-  "haneoka.theme-host.v1",
-);
+export const HANEOKA_THEME_HOST = defineVegaService<HaneokaThemeHost>("haneoka.theme-host.v1");
 
-export const createHaneokaThemeHostPlugin = (
-  host: HaneokaThemeHost,
-): VegaPlugin =>
+export const createHaneokaThemeHostPlugin = (host: HaneokaThemeHost): VegaPlugin =>
   defineVegaPlugin({
     manifest: {
       id: "haneoka.theme-host",
       name: "Haneoka Theme Host",
       version: "0.1.0",
       apiVersion: 1,
-      description:
-        "Application ports for licensed assets and Haneoka theme settings",
+      description: "Application ports for licensed assets and Haneoka theme settings",
     },
     setup(context) {
       context.provide(HANEOKA_THEME_HOST, host);

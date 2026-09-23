@@ -1,0 +1,122 @@
+export const HANEOKA_PHONE_TEXT = {
+  title: {
+    size: 34.5,
+    autoSize: true,
+    minSize: 18.0,
+    maxSize: 40.0,
+    font: "NotoSansJP-Regular SDF",
+    material: "NotoSansJP-Regular - Default",
+    characterSpacing: -8.0,
+    lineSpacing: 0.0,
+    bold: true,
+    color: [0.019607843831181526, 0.07058823853731155, 0.20000000298023224, 1.0],
+  },
+  battery: {
+    size: 20.700000762939453,
+    autoSize: false,
+    minSize: 18.0,
+    maxSize: 72.0,
+    font: "NotoSansJP-Regular SDF",
+    material: "NotoSansJP-Regular - Default",
+    characterSpacing: 0.0,
+    lineSpacing: 0.0,
+    bold: false,
+    color: [0.019607843831181526, 0.07058823853731155, 0.20000000298023224, 1.0],
+  },
+  speaker: {
+    size: 20.0,
+    autoSize: true,
+    minSize: 18.0,
+    maxSize: 20.0,
+    font: "NotoSansJP-Regular SDF",
+    material: "NotoSansJP-Regular - Default",
+    characterSpacing: -8.0,
+    lineSpacing: 0.0,
+    bold: true,
+    color: [0.019607843831181526, 0.07058823853731155, 0.20000000298023224, 1.0],
+  },
+  message: {
+    size: 24.0,
+    autoSize: false,
+    minSize: 18.0,
+    maxSize: 72.0,
+    font: "NotoSansJP-Regular SDF",
+    material: "NotoSansJP-Regular - Default",
+    characterSpacing: 0.0,
+    lineSpacing: -21.0,
+    bold: false,
+    color: [0.019607843831181526, 0.07058823853731155, 0.20000000298023224, 1.0],
+  },
+  read: {
+    size: 20.0,
+    autoSize: true,
+    minSize: 18.0,
+    maxSize: 20.0,
+    font: "NotoSansJP-Regular SDF",
+    material: "NotoSansJP-Regular - Default",
+    characterSpacing: 0.0,
+    lineSpacing: 0.0,
+    bold: false,
+    color: [0.4156862795352936, 0.4274509847164154, 0.4745098054409027, 1.0],
+  },
+  typing: {
+    size: 24.0,
+    autoSize: false,
+    minSize: 18.0,
+    maxSize: 72.0,
+    font: "NotoSansJP-Regular SDF",
+    material: "NotoSansJP-Regular - Default",
+    characterSpacing: 0.0,
+    lineSpacing: -21.0,
+    bold: false,
+    color: [0.019607843831181526, 0.07058823853731155, 0.20000000298023224, 1.0],
+  },
+  incomingName: {
+    size: 48.29999923706055,
+    autoSize: false,
+    minSize: 18.0,
+    maxSize: 20.0,
+    font: "NotoSansJP-Regular SDF",
+    material: "NotoSansJP-Regular SDF Material",
+    characterSpacing: -8.0,
+    lineSpacing: 0.0,
+    bold: true,
+    color: [1.0, 1.0, 1.0, 1.0],
+  },
+  incomingStatus: {
+    size: 30.0,
+    autoSize: false,
+    minSize: 18.0,
+    maxSize: 20.0,
+    font: "NotoSansJP-Regular SDF",
+    material: "NotoSansJP-Regular SDF Material",
+    characterSpacing: -8.0,
+    lineSpacing: 0.0,
+    bold: true,
+    color: [1.0, 1.0, 1.0, 1.0],
+  },
+  lockStatus: {
+    size: 40.0,
+    autoSize: false,
+    minSize: 18.0,
+    maxSize: 20.0,
+    font: "NotoSansJP-Regular SDF",
+    material: "NotoSansJP-Regular SDF Material",
+    characterSpacing: -8.0,
+    lineSpacing: 0.0,
+    bold: true,
+    color: [1.0, 1.0, 1.0, 1.0],
+  },
+} as const;
+
+export function applyPhoneTextProfile(element: HTMLElement, role: keyof typeof HANEOKA_PHONE_TEXT): void {
+  const profile = HANEOKA_PHONE_TEXT[role];
+  element.dataset.textProfile = JSON.stringify(profile);
+  element.style.fontSize = `${profile.size / 7}cqh`;
+  element.style.fontWeight = profile.bold ? "700" : "400";
+  element.style.letterSpacing = `${profile.characterSpacing / 100}em`;
+  element.style.color = `rgba(${profile.color
+    .slice(0, 3)
+    .map((value) => value * 255)
+    .join(",")},${profile.color[3]})`;
+}

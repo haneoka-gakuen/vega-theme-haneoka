@@ -1,281 +1,225 @@
+import { resolveEase } from "@haneoka/vega/renderer-kit";
+import { createHaneokaSdfBinding } from "./typography.js";
+import { createHaneokaMenuEntry } from "./menuEntry.js";
 import type { VegaDisposable, VegaUiSlotContext } from "@haneoka/vega/plugin";
-import {
-  VEGA_SHELL_CONTROLLER,
-  type VegaShellSnapshot,
-} from "@haneoka/vega/shell";
-import {
-  HANEOKA_THEME_HOST,
-  type HaneokaThemeHost,
-  type HaneokaThemeHostSnapshot,
-} from "./host.js";
-import { createHaneokaIcon } from "./icons.js";
-
+import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
+import { HANEOKA_THEME_HOST } from "./host.js";
+import { createHaneokaShellTypography } from "./shellTypography.js";
+import { haneokaUiLocale } from "./locale.js";
+import { mountHaneokaProgress } from "./progress.js";
 export const HANEOKA_CONTROLS_ID = "haneoka-controls";
-
-let controlsSequence = 0;
-
-/**
- * Haneoka is an archive story viewer, not a save-based visual novel shell.
- * Its persistent transport deliberately mirrors the chart player: one
- * play/pause action and one seekable timeline, with no game menu utilities.
- */
-export const mountHaneokaControls = (
-  host: HTMLElement,
-  context: VegaUiSlotContext,
-): VegaDisposable => {
-  const shell = context.services(VEGA_SHELL_CONTROLLER);
-  if (!shell) {
-    throw new ReferenceError(
-      "The Haneoka theme controls require VEGA_SHELL_CONTROLLER",
-    );
-  }
-  const themeHost = context.services(HANEOKA_THEME_HOST);
-  if (themeHost?.externalPlaybackControls) {
-    return { dispose() {} };
-  }
-  const document = host.ownerDocument;
-  const listeners = new AbortController();
-  const controlsId = `haneoka-controls-${++controlsSequence}`;
-
-  const root = document.createElement("nav");
-  root.className =
-    "haneoka-controls md3-runtime-surface md3-runtime-surface--dock";
-  root.id = controlsId;
-  root.setAttribute(
-    "aria-label",
-    themeHost ? label(themeHost, "playback", "Playback") : "Playback",
-  );
-
-  const play = document.createElement("button");
-  play.type = "button";
-  play.className =
-    "haneoka-controls__button md3-icon-button md3-icon-button--runtime is-emphasis";
-  play.dataset.action = "play";
-
-  const playIcon = document.createElement("span");
-  playIcon.className = "haneoka-controls__icon md3-icon-button__icon";
-  playIcon.setAttribute("aria-hidden", "true");
-  const playLabel = document.createElement("span");
-  playLabel.className = "haneoka-controls__label";
-  play.append(playIcon, playLabel);
-
-  const timeline = document.createElement("label");
-  timeline.className =
-    "haneoka-controls__timeline md3-timeline md3-timeline--runtime";
-  const timelineName = document.createElement("span");
-  timelineName.className = "haneoka-controls__timeline-name";
-  timelineName.textContent = themeHost
-    ? label(themeHost, "seek", "Seek")
-    : "Seek";
-  const currentLabel = document.createElement("span");
-  currentLabel.className = "haneoka-controls__progress-label";
-  const progress = range(document, 0, 1, 0.001);
-  progress.className = "haneoka-controls__progress md3-timeline__input";
-  progress.setAttribute("aria-label", timelineName.textContent);
-  const durationLabel = document.createElement("span");
-  durationLabel.className = "haneoka-controls__progress-label";
-  timeline.append(timelineName, currentLabel, progress, durationLabel);
-
-  const status = document.createElement("p");
-  status.className = "haneoka-controls__status";
-  status.setAttribute("role", "status");
-  status.setAttribute("aria-live", "polite");
-
-  root.append(play, timeline, status);
+const labels = {
+  en: ["Menu", "Auto", "Skip", "Log", "Q.Save", "Load", "Hide", "Skip video", "Saved"],
+  ja: ["メニュー", "オート", "スキップ", "ログ", "Q.セーブ", "ロード", "非表示", "動画スキップ", "セーブしました"],
+  "zh-CN": ["菜单", "自动", "快进", "回看", "快存", "读档", "隐藏", "跳过视频", "已快速保存"],
+  "zh-TW": ["選單", "自動", "快轉", "回看", "快存", "讀檔", "隱藏", "跳過影片", "已快速儲存"],
+  ko: ["메뉴", "자동", "스킵", "로그", "빠른 저장", "불러오기", "숨기기", "영상 건너뛰기", "저장 완료"],
+} as const;
+export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotContext): VegaDisposable {
+  const controller = context.services(VEGA_SHELL_CONTROLLER);
+  if (!controller) throw new Error("A shell controller is required");
+  const adapter = context.services(HANEOKA_THEME_HOST);
+  if (adapter?.externalPlaybackControls) return { dispose() {} };
+  const document = host.ownerDocument,
+    root = document.createElement("nav");
+  root.className = "haneoka-controls";
+  root.hidden = true;
   host.append(root);
-  context.root.classList.add("haneoka-theme-controls-active");
-  context.root.dataset.haneokaControls = "true";
-
-  let latest = shell.snapshot();
-  let latestHost = themeHost?.snapshot();
-  let localSeekValue: number | undefined;
-  let disposed = false;
-
-  const paintProgress = (value: number, valueText?: string): void => {
-    progress.value = String(value);
-    progress.setAttribute("aria-valuetext", valueText ?? String(value));
-    timeline.style.setProperty(
-      "--haneoka-controls-progress",
-      `${value * 100}%`,
-    );
-  };
-
-  const paintPlayback = (
-    shellSnapshot: VegaShellSnapshot,
-    hostSnapshot: HaneokaThemeHostSnapshot | undefined,
-  ): void => {
-    const playing = hostSnapshot?.autoAdvance ?? shellSnapshot.autoPlay;
-    const actionLabel = themeHost
-      ? playing
-        ? label(themeHost, "pause", "Pause")
-        : label(themeHost, "play", "Play")
-      : playing
-        ? "Pause"
-        : "Play";
-    play.setAttribute("aria-label", actionLabel);
-    play.title = actionLabel;
-    playLabel.textContent = actionLabel;
-    playIcon.replaceChildren(
-      createHaneokaIcon(document, playing ? "pause" : "play"),
-    );
-    play.disabled = hostSnapshot?.autoAdvanceDisabled ?? false;
-  };
-
-  const render = (snapshot = latest): void => {
-    latest = snapshot;
-    latestHost = themeHost?.snapshot() ?? latestHost;
-    root.hidden = snapshot.screen !== "game";
-    paintPlayback(snapshot, latestHost);
-
-    timeline.hidden = !latestHost;
-    if (!latestHost) return;
-    const value = clampProgress(latestHost.progress);
-    progress.disabled = !latestHost.progressEnabled;
-    timeline.classList.toggle("is-disabled", !latestHost.progressEnabled);
-    const labels = splitProgressLabel(latestHost.progressLabel);
-    currentLabel.textContent = labels.current;
-    durationLabel.textContent = labels.duration;
-    if (!latestHost.progressEnabled) localSeekValue = undefined;
-    if (localSeekValue === undefined) {
-      paintProgress(value, latestHost.progressLabel);
-    }
-  };
-
-  play.addEventListener(
-    "click",
-    () => {
-      if (themeHost) themeHost.toggleAutoAdvance();
-      else shell.toggleAuto();
-    },
-    { signal: listeners.signal },
-  );
-
-  progress.addEventListener(
-    "input",
-    () => {
-      localSeekValue = clampProgress(Number(progress.value));
-      paintProgress(localSeekValue);
-    },
-    { signal: listeners.signal },
-  );
-  const commitSeek = (): void => {
-    if (!themeHost || progress.disabled) {
-      localSeekValue = undefined;
+  const font = createHaneokaShellTypography(context),
+    events = new AbortController(),
+    stopProgress = mountHaneokaProgress(host, context);
+  const nativeFont = createHaneokaSdfBinding(document, context.resources, context.signal);
+  const { button: menu, surface: pressLayer, label: menuLabel } = createHaneokaMenuEntry(document);
+  let pressFrame = 0,
+    pressValue = 1,
+    pressed = false;
+  const animatePress = (down: boolean) => {
+    const view = document.defaultView;
+    view?.cancelAnimationFrame(pressFrame);
+    if (view?.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      pressValue = 1;
+      pressLayer.style.transform = "none";
       return;
     }
-    const value = localSeekValue ?? clampProgress(Number(progress.value));
-    try {
-      themeHost.seekProgress(value);
-    } finally {
-      localSeekValue = undefined;
-    }
+    const start = performance.now(),
+      from = pressValue,
+      to = down ? Math.fround(0.9) : 1,
+      duration = down ? 150 : 100;
+    const ease = resolveEase(down ? 30 : 9);
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      pressValue = from + (to - from) * ease(progress);
+      pressLayer.style.transform = `scale(${pressValue})`;
+      if (progress < 1) pressFrame = view?.requestAnimationFrame(step) ?? 0;
+    };
+    pressFrame = view?.requestAnimationFrame(step) ?? 0;
   };
-  const cancelSeek = (): void => {
-    if (localSeekValue === undefined) return;
-    localSeekValue = undefined;
-    if (latestHost) {
-      paintProgress(
-        clampProgress(latestHost.progress),
-        latestHost.progressLabel,
-      );
-    }
+  root.append(menu);
+  const quick = document.createElement("div");
+  quick.className = "haneoka-quickbar";
+  const toast = document.createElement("output");
+  toast.className = "haneoka-control-toast";
+  toast.setAttribute("role", "status");
+  toast.hidden = true;
+  let disposed = false,
+    frame = 0,
+    signature = "",
+    toastTimer: ReturnType<typeof setTimeout> | undefined,
+    snapshot = controller.snapshot();
+  const message = (value: string) => {
+    toast.textContent = value;
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.hidden = true;
+    }, 3000);
   };
-  progress.addEventListener("change", commitSeek, {
-    signal: listeners.signal,
-  });
-  progress.addEventListener("pointercancel", cancelSeek, {
-    signal: listeners.signal,
-  });
-  progress.addEventListener(
-    "blur",
-    () => {
-      if (localSeekValue !== undefined) commitSeek();
+  const invoke = (action: () => unknown) =>
+    void Promise.resolve()
+      .then(action)
+      .catch((error) => message(error instanceof Error ? error.message : String(error)));
+  menu.addEventListener(
+    "click",
+    (event) => {
+      event.stopPropagation();
+      invoke(() => controller.open("menu"));
     },
-    { signal: listeners.signal },
+    { signal: events.signal },
   );
-
-  const onDocumentKeyDown = (event: KeyboardEvent): void => {
-    if (event.key !== "Escape" || latest.screen !== "game") return;
-    if (isEditingTarget(event.target)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-  document.addEventListener("keydown", onDocumentKeyDown, {
-    capture: true,
-    signal: listeners.signal,
+  const actions = [
+    ["auto", 1, () => controller.toggleAuto()],
+    ["fast", 2, () => controller.toggleFastForward()],
+    ["log", 3, () => controller.open("backlog")],
+    [
+      "save",
+      4,
+      async () => {
+        await controller.quickSave();
+        message(labels[haneokaUiLocale(controller.snapshot().settings.uiLanguage, document)][8]);
+      },
+    ],
+    ["load", 5, () => controller.open("load")],
+    [
+      "hide",
+      6,
+      () => {
+        context.root.dataset.vegaUiHidden = "true";
+      },
+    ],
+  ] as const;
+  const controls = actions.map(([action, index, execute]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.action = action;
+    const label = document.createElement("span");
+    label.className = "haneoka-control-label";
+    button.append(label);
+    button.addEventListener(
+      "click",
+      (event) => {
+        event.stopPropagation();
+        invoke(execute);
+      },
+      { signal: events.signal },
+    );
+    quick.append(button);
+    return { button, label, index, action };
   });
-
-  const subscription = shell.subscribe(render);
-  const hostSubscription = themeHost?.subscribe((snapshot) => {
-    latestHost = snapshot;
+  const skip = document.createElement("button");
+  skip.type = "button";
+  skip.className = "haneoka-video-skip";
+  const skipLabel = document.createElement("span");
+  skipLabel.className = "haneoka-control-label";
+  skip.append(skipLabel);
+  skip.addEventListener(
+    "click",
+    (event) => {
+      event.stopPropagation();
+      context.player.skipCurrentVideo();
+    },
+    { signal: events.signal },
+  );
+  root.append(quick, skip, toast);
+  const render = () => {
+    const locale = haneokaUiLocale(snapshot.settings.uiLanguage, document),
+      hidden = snapshot.screen !== "game" || context.state.loading || !context.state.ready,
+      next = `${locale}|${hidden}|${context.state.autoPlay}|${context.state.fastForward}|${context.state.video.visible}`;
+    if (next === signature) return;
+    signature = next;
+    root.hidden = hidden;
+    root.lang = locale;
+    const words = labels[locale];
+    menu.setAttribute("aria-label", words[0]);
+    nativeFont.render(menuLabel, "MENU");
+    for (const { button, label, index, action } of controls) {
+      font.set(label, words[index]);
+      button.setAttribute("aria-label", words[index]);
+      if (action === "auto" || action === "fast")
+        button.setAttribute(
+          "aria-pressed",
+          String(action === "auto" ? context.state.autoPlay : context.state.fastForward),
+        );
+    }
+    skip.hidden = !context.state.video.visible;
+    font.set(skipLabel, words[7]);
+  };
+  const releasePress = () => {
+    if (!pressed) return;
+    pressed = false;
+    animatePress(false);
+  };
+  menu.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (event.button !== 0) return;
+      pressed = true;
+      animatePress(true);
+    },
+    { signal: events.signal },
+  );
+  document.addEventListener("pointerup", releasePress, {
+    signal: events.signal,
+  });
+  document.addEventListener("pointercancel", releasePress, {
+    signal: events.signal,
+  });
+  menu.addEventListener(
+    "keydown",
+    (event) => {
+      if (!event.repeat && ["Enter", " "].includes(event.key)) {
+        pressed = true;
+        animatePress(true);
+      }
+    },
+    { signal: events.signal },
+  );
+  menu.addEventListener("keyup", releasePress, { signal: events.signal });
+  menu.addEventListener("blur", releasePress, { signal: events.signal });
+  const subscription = controller.subscribe((next) => {
+    snapshot = next;
     render();
   });
-  render();
-
-  function dispose(): void {
-    if (disposed) return;
-    disposed = true;
-    listeners.abort();
-    release(subscription);
-    if (hostSubscription) release(hostSubscription);
-    context.signal.removeEventListener("abort", dispose);
-    context.root.classList.remove("haneoka-theme-controls-active");
-    delete context.root.dataset.haneokaControls;
-    root.remove();
-  }
-
-  if (context.signal.aborted) dispose();
-  else context.signal.addEventListener("abort", dispose, { once: true });
-
-  return { dispose };
-};
-
-const splitProgressLabel = (
-  value: string | undefined,
-): { current: string; duration: string } => {
-  const match = /^\s*(.*?)\s*\/\s*(.*?)\s*$/.exec(value ?? "");
-  if (!match) return { current: "", duration: value?.trim() ?? "" };
-  return {
-    current: match[1]?.trim() ?? "",
-    duration: match[2]?.trim() ?? "",
+  const update = () => {
+    if (disposed || context.signal.aborted) return;
+    render();
+    frame = document.defaultView?.requestAnimationFrame(update) ?? 0;
   };
-};
-
-const range = (
-  document: Document,
-  minimum: number,
-  maximum: number,
-  step: number,
-): HTMLInputElement => {
-  const input = document.createElement("input");
-  input.type = "range";
-  input.min = String(minimum);
-  input.max = String(maximum);
-  input.step = String(step);
-  return input;
-};
-
-const clampProgress = (value: number): number =>
-  Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
-
-const label = (host: HaneokaThemeHost, key: string, fallback: string): string =>
-  host.labels?.[key] || fallback;
-
-const release = (
-  disposable: VegaDisposable | (() => void) | undefined,
-): void => {
-  if (!disposable) return;
-  if (typeof disposable === "function") void disposable();
-  else if ("dispose" in disposable) void disposable.dispose();
-  else if ("destroy" in disposable) void disposable.destroy();
-  else void disposable.close();
-};
-
-const isEditingTarget = (target: EventTarget | null): boolean => {
-  if (!(target instanceof Element)) return false;
-  return Boolean(
-    target.closest(
-      'input, textarea, select, [contenteditable="true"], [role="textbox"]',
-    ),
-  );
-};
+  update();
+  return {
+    dispose() {
+      disposed = true;
+      events.abort();
+      document.defaultView?.cancelAnimationFrame(frame);
+      clearTimeout(toastTimer);
+      stopProgress();
+      document.defaultView?.cancelAnimationFrame(pressFrame);
+      nativeFont.dispose();
+      font.dispose();
+      if (typeof subscription === "function") void subscription();
+      else if ("dispose" in subscription) void subscription.dispose();
+      else if ("destroy" in subscription) void subscription.destroy();
+      else void subscription.close();
+      root.remove();
+    },
+  };
+}
