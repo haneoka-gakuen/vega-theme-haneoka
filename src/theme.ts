@@ -722,16 +722,16 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-controls .haneoka-menu-entry:focus-visible{outline:none}
 [data-vega-theme="haneoka"] .haneoka-menu-entry:focus-visible .haneoka-menu-press{outline:2px solid #acdacf;outline-offset:3px}
 [data-vega-theme="haneoka"] .haneoka-control-label{white-space:nowrap;display:block}
-[data-vega-theme="haneoka"] .haneoka-quickbar{position:absolute;right:max(3.6cqh,12px);bottom:calc(62px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:0;max-width:calc(100% - 24px);overflow-x:auto;scrollbar-width:none;pointer-events:auto;padding:3px 7px;border:1px solid #bbccec24;border-radius:3px;background:#111a2d7a;backdrop-filter:blur(5px);opacity:0;transition:opacity .18s;pointer-events:none;}
-[data-vega-theme="haneoka"][data-vega-transport-visible] .haneoka-quickbar,[data-vega-theme="haneoka"] .haneoka-quickbar:is(:hover,:focus-within){opacity:1;pointer-events:auto}
-[data-vega-theme="haneoka"] .haneoka-quickbar>button{min-height:30px;border:0;border-radius:2px;background:transparent;padding:4px 12px;font-size:clamp(11px,1.85cqh,17px);color:#edf3ffdb;pointer-events:inherit}
-[data-vega-theme="haneoka"] .haneoka-quickbar>button+button::before{content:"";position:absolute;margin-left:-24px;height:10px;width:1px;background:#cadbff24;pointer-events:none}
-[data-vega-theme="haneoka"] .haneoka-quickbar>button:hover,[data-vega-theme="haneoka"] .haneoka-quickbar>button[aria-pressed="true"]{color:#b5eee3;background:#abd1db12}
+[data-vega-theme="haneoka"] .haneoka-quickbar{position:absolute;right:max(1.8cqh,10px);top:11.8cqh;display:flex;flex-direction:column;align-items:stretch;width:clamp(138px,20.4cqh,220px);max-height:min(74cqh,calc(100% - 25cqh));overflow-y:auto;scrollbar-width:thin;pointer-events:none;padding:4px;border:1px solid #bbccec50;border-radius:8px;background:#101a34ed;box-shadow:0 18px 40px #07112499;backdrop-filter:blur(12px);opacity:0;visibility:hidden;transform:translateY(-7px);transition:opacity .15s,transform .15s,visibility .15s;}
+[data-vega-theme="haneoka"] .haneoka-quickbar[data-open="true"]{opacity:1;visibility:visible;transform:none;pointer-events:auto}
+[data-vega-theme="haneoka"] .haneoka-quickbar>button{position:relative;flex:none;min-height:clamp(22px,8.2cqh,88px);width:100%;border:0;border-radius:4px;background:transparent;padding:2px 16px;text-align:left;font-size:clamp(12px,1.85cqh,17px);color:#edf3ff;cursor:pointer}
+[data-vega-theme="haneoka"] .haneoka-quickbar>button+button{border-top:1px solid #cadbff25}
+[data-vega-theme="haneoka"] .haneoka-quickbar>button:hover,[data-vega-theme="haneoka"] .haneoka-quickbar>button[aria-pressed="true"]{color:#b5eee3;background:#abd1db1f}
 [data-vega-theme="haneoka"] .haneoka-controls :focus-visible{outline:2px solid #acdacf;outline-offset:3px}
 [data-vega-theme="haneoka"] .haneoka-control-toast{position:absolute;bottom:15cqh;left:50%;transform:translateX(-50%);max-width:75%;background:#17253bea;border:1px solid #91b9d560;border-radius:3px;padding:10px 20px;color:#fff;font-size:clamp(12px,2cqh,18px)}
 [data-vega-theme="haneoka"] .haneoka-video-skip{position:absolute;right:4cqh;bottom:12cqh;border:1px solid #becdff70;border-radius:3px;background:#162139b3;padding:10px 18px}
 [data-vega-theme="haneoka"][data-vega-ui-hidden=true] .haneoka-controls,[data-vega-theme="haneoka"][data-vega-ui-hidden=true] .haneoka-progress{visibility:hidden}
-@container(max-width:540px){[data-vega-theme="haneoka"] .haneoka-quickbar>button{padding:5px 8px;font-size:11px}[data-vega-theme="haneoka"] .haneoka-quickbar{right:12px;bottom:calc(62px + env(safe-area-inset-bottom,0px))}}
+@container(max-width:540px){[data-vega-theme="haneoka"] .haneoka-quickbar>button{padding:2px 12px;font-size:12px}[data-vega-theme="haneoka"] .haneoka-quickbar{right:8px;top:12cqh;max-height:74cqh}}
 @media(prefers-reduced-motion:reduce){[data-vega-theme="haneoka"] .haneoka-quickbar{transition:none}}
 [data-vega-theme="haneoka"] .haneoka-progress {
   position: absolute; z-index: 76; inset: auto 0 0; height: 48px; box-sizing: content-box;

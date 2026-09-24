@@ -9,6 +9,7 @@ import { createHaneokaShellTypography } from "./shellTypography.js";
 import { haneokaUiLocale } from "./locale.js";
 import { mountHaneokaProgress } from "./progress.js";
 export const HANEOKA_CONTROLS_ID = "haneoka-controls";
+let nextQuickbarId = 0;
 const labels = {
   en: [
     "Menu",
@@ -24,6 +25,8 @@ const labels = {
     "Fullscreen",
     "Continuous",
     "Leave story",
+    "Fast",
+    "More",
   ],
   ja: [
     "メニュー",
@@ -39,11 +42,13 @@ const labels = {
     "全画面",
     "連続再生",
     "中断",
+    "早送り",
+    "その他",
   ],
   "zh-CN": [
     "菜单",
     "自动",
-    "快进",
+    "跳过",
     "回看",
     "快存",
     "读档",
@@ -54,11 +59,13 @@ const labels = {
     "全屏",
     "连续播放",
     "退出剧情",
+    "快进",
+    "更多",
   ],
   "zh-TW": [
     "選單",
     "自動",
-    "快轉",
+    "跳過",
     "回看",
     "快存",
     "讀檔",
@@ -69,6 +76,8 @@ const labels = {
     "全螢幕",
     "連續播放",
     "離開劇情",
+    "快轉",
+    "更多",
   ],
   ko: [
     "메뉴",
@@ -84,6 +93,8 @@ const labels = {
     "전체 화면",
     "연속 재생",
     "스토리 나가기",
+    "빨리 감기",
+    "더 보기",
   ],
 } as const;
 export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotContext): VegaDisposable {
@@ -130,6 +141,10 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   root.append(menu);
   const quick = document.createElement("div");
   quick.className = "haneoka-quickbar";
+  quick.id = `haneoka-quickbar-${++nextQuickbarId}`;
+  menu.setAttribute("aria-controls", quick.id);
+  menu.setAttribute("aria-haspopup", "menu");
+  let expanded = false;
   const toast = document.createElement("output");
   toast.className = "haneoka-control-toast";
   toast.setAttribute("role", "status");
@@ -155,22 +170,24 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     "click",
     (event) => {
       event.stopPropagation();
-      invoke(() => controller.open("menu"));
+      expanded = !expanded;
+      render();
     },
     { signal: events.signal },
   );
   const actions = [
+    ["skip", 2, () => context.player.skip()],
     ["auto", 1, () => controller.toggleAuto()],
-    ["fast", 2, () => controller.toggleFastForward()],
-    ["log", 3, () => controller.open("backlog")],
-    ["subtitles", 9, () => controller.setSetting("subtitlesEnabled", !controller.snapshot().settings.subtitlesEnabled)],
-    ["fullscreen", 10, () => adapter?.toggleFullscreen() ?? context.root.requestFullscreen?.()],
+    ["fast", 13, () => controller.toggleFastForward()],
     ...(sequence
       ? ([
           ["continuous", 11, () => sequence.toggleContinuous()],
           ["interrupt", 12, () => sequence.interrupt()],
         ] as const)
       : []),
+    ["log", 3, () => controller.open("backlog")],
+    ["fullscreen", 10, () => adapter?.toggleFullscreen() ?? context.root.requestFullscreen?.()],
+    ["subtitles", 9, () => controller.setSetting("subtitlesEnabled", !controller.snapshot().settings.subtitlesEnabled)],
     [
       "save",
       4,
@@ -180,6 +197,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       },
     ],
     ["load", 5, () => controller.open("load")],
+    ["more", 14, () => controller.open("menu")],
     [
       "hide",
       6,
@@ -199,6 +217,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       "click",
       (event) => {
         event.stopPropagation();
+        expanded = false;
+        render();
         invoke(execute);
       },
       { signal: events.signal },
@@ -223,11 +243,14 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   root.append(quick, skip, toast);
   const render = () => {
     const locale = haneokaUiLocale(snapshot.settings.uiLanguage, document),
-      hidden = snapshot.screen !== "game" || context.state.loading || !context.state.ready,
-      next = `${locale}|${hidden}|${context.state.autoPlay}|${context.state.fastForward}|${context.state.video.visible}|${snapshot.settings.subtitlesEnabled}|${Boolean(document.fullscreenElement)}|${sequence?.continuous}`;
+      hidden = snapshot.screen !== "game" || context.state.loading || !context.state.ready;
+    if (hidden) expanded = false;
+    const next = `${locale}|${hidden}|${expanded}|${context.state.autoPlay}|${context.state.fastForward}|${context.state.video.visible}|${snapshot.settings.subtitlesEnabled}|${Boolean(document.fullscreenElement)}|${sequence?.continuous}`;
     if (next === signature) return;
     signature = next;
     root.hidden = hidden;
+    quick.dataset.open = String(expanded && !hidden);
+    menu.setAttribute("aria-expanded", String(expanded && !hidden));
     root.lang = locale;
     const words = labels[locale];
     menu.setAttribute("aria-label", words[0]);
@@ -277,6 +300,25 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   document.addEventListener("pointerup", releasePress, {
     signal: events.signal,
   });
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (!expanded || root.contains(event.target as Node)) return;
+      expanded = false;
+      render();
+    },
+    { signal: events.signal },
+  );
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (!expanded || event.key !== "Escape") return;
+      expanded = false;
+      render();
+      menu.focus();
+    },
+    { signal: events.signal },
+  );
   document.addEventListener("pointercancel", releasePress, {
     signal: events.signal,
   });
