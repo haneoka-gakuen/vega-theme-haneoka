@@ -10,11 +10,35 @@ import { haneokaUiLocale } from "./locale.js";
 import { mountHaneokaProgress } from "./progress.js";
 export const HANEOKA_CONTROLS_ID = "haneoka-controls";
 const labels = {
-  en: ["Menu", "Auto", "Skip", "Log", "Q.Save", "Load", "Hide", "Skip video", "Saved"],
-  ja: ["メニュー", "オート", "スキップ", "ログ", "Q.セーブ", "ロード", "非表示", "動画スキップ", "セーブしました"],
-  "zh-CN": ["菜单", "自动", "快进", "回看", "快存", "读档", "隐藏", "跳过视频", "已快速保存"],
-  "zh-TW": ["選單", "自動", "快轉", "回看", "快存", "讀檔", "隱藏", "跳過影片", "已快速儲存"],
-  ko: ["메뉴", "자동", "스킵", "로그", "빠른 저장", "불러오기", "숨기기", "영상 건너뛰기", "저장 완료"],
+  en: ["Menu", "Auto", "Skip", "Log", "Q.Save", "Load", "Hide", "Skip video", "Saved", "Subtitles", "Fullscreen"],
+  ja: [
+    "メニュー",
+    "オート",
+    "スキップ",
+    "ログ",
+    "Q.セーブ",
+    "ロード",
+    "非表示",
+    "動画スキップ",
+    "セーブしました",
+    "字幕",
+    "全画面",
+  ],
+  "zh-CN": ["菜单", "自动", "快进", "回看", "快存", "读档", "隐藏", "跳过视频", "已快速保存", "字幕", "全屏"],
+  "zh-TW": ["選單", "自動", "快轉", "回看", "快存", "讀檔", "隱藏", "跳過影片", "已快速儲存", "字幕", "全螢幕"],
+  ko: [
+    "메뉴",
+    "자동",
+    "스킵",
+    "로그",
+    "빠른 저장",
+    "불러오기",
+    "숨기기",
+    "영상 건너뛰기",
+    "저장 완료",
+    "자막",
+    "전체 화면",
+  ],
 } as const;
 export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotContext): VegaDisposable {
   const controller = context.services(VEGA_SHELL_CONTROLLER);
@@ -92,6 +116,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     ["auto", 1, () => controller.toggleAuto()],
     ["fast", 2, () => controller.toggleFastForward()],
     ["log", 3, () => controller.open("backlog")],
+    ["subtitles", 9, () => controller.setSetting("subtitlesEnabled", !controller.snapshot().settings.subtitlesEnabled)],
+    ["fullscreen", 10, () => adapter?.toggleFullscreen() ?? context.root.requestFullscreen?.()],
     [
       "save",
       4,
@@ -145,7 +171,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   const render = () => {
     const locale = haneokaUiLocale(snapshot.settings.uiLanguage, document),
       hidden = snapshot.screen !== "game" || context.state.loading || !context.state.ready,
-      next = `${locale}|${hidden}|${context.state.autoPlay}|${context.state.fastForward}|${context.state.video.visible}`;
+      next = `${locale}|${hidden}|${context.state.autoPlay}|${context.state.fastForward}|${context.state.video.visible}|${snapshot.settings.subtitlesEnabled}|${Boolean(document.fullscreenElement)}`;
     if (next === signature) return;
     signature = next;
     root.hidden = hidden;
@@ -156,10 +182,18 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     for (const { button, label, index, action } of controls) {
       font.set(label, words[index]);
       button.setAttribute("aria-label", words[index]);
-      if (action === "auto" || action === "fast")
+      if (action === "auto" || action === "fast" || action === "subtitles" || action === "fullscreen")
         button.setAttribute(
           "aria-pressed",
-          String(action === "auto" ? context.state.autoPlay : context.state.fastForward),
+          String(
+            action === "auto"
+              ? context.state.autoPlay
+              : action === "fast"
+                ? context.state.fastForward
+                : action === "subtitles"
+                  ? snapshot.settings.subtitlesEnabled
+                  : Boolean(document.fullscreenElement),
+          ),
         );
     }
     skip.hidden = !context.state.video.visible;

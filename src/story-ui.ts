@@ -21,6 +21,11 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
   );
   const phone = mountHaneokaPhone(root, context),
     events = new AbortController();
+  const centerBackdrop = document.createElement("div");
+  centerBackdrop.className = "haneoka-center-talk-backdrop";
+  centerBackdrop.hidden = true;
+  centerBackdrop.setAttribute("aria-hidden", "true");
+  root.insertBefore(centerBackdrop, phoneRoot());
   const loading = document.createElement("div");
   loading.className = "haneoka-loading";
   const loadingLabel = document.createElement("span"),
@@ -149,6 +154,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
           for (const indicator of scene.all("AutoIcon")) indicator.hidden = !state.autoPlay;
           for (const indicator of scene.all("FastIcon")) indicator.hidden = !state.fastForward;
         }
+        centerBackdrop.hidden = scenes.get("center")!.root.hidden;
         const now = document.defaultView?.performance.now() ?? Date.now();
         if (!state.title.visible) titleKey = "";
         if (!state.location.visible) locationKey = "";

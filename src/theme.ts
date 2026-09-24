@@ -117,6 +117,7 @@ export const HANEOKA_THEME_CSS = String.raw`
 }
 
 [data-vega-theme="haneoka"] .haneoka-story-ui { position:absolute; inset:0; pointer-events:none; color:white; font-family:var(--haneoka-font); }
+[data-vega-theme="haneoka"] .haneoka-center-talk-backdrop {position:absolute;inset:0;background:rgba(0,0,0,.4);pointer-events:none}
 [data-vega-theme="haneoka"] .haneoka-scene [hidden],
 [data-vega-theme="haneoka"] .haneoka-story-ui>[hidden] {display:none!important}
 [data-vega-theme="haneoka"] .haneoka-native-controls {position:absolute;inset:0;pointer-events:none}
@@ -721,7 +722,7 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-controls .haneoka-menu-entry:focus-visible{outline:none}
 [data-vega-theme="haneoka"] .haneoka-menu-entry:focus-visible .haneoka-menu-press{outline:2px solid #acdacf;outline-offset:3px}
 [data-vega-theme="haneoka"] .haneoka-control-label{white-space:nowrap;display:block}
-[data-vega-theme="haneoka"] .haneoka-quickbar{position:absolute;right:max(3.6cqh,12px);bottom:calc(62px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:0;pointer-events:auto;padding:3px 7px;border:1px solid #bbccec24;border-radius:3px;background:#111a2d7a;backdrop-filter:blur(5px);opacity:0;transition:opacity .18s;pointer-events:none;}
+[data-vega-theme="haneoka"] .haneoka-quickbar{position:absolute;right:max(3.6cqh,12px);bottom:calc(62px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:0;max-width:calc(100% - 24px);overflow-x:auto;scrollbar-width:none;pointer-events:auto;padding:3px 7px;border:1px solid #bbccec24;border-radius:3px;background:#111a2d7a;backdrop-filter:blur(5px);opacity:0;transition:opacity .18s;pointer-events:none;}
 [data-vega-theme="haneoka"][data-vega-transport-visible] .haneoka-quickbar,[data-vega-theme="haneoka"] .haneoka-quickbar:is(:hover,:focus-within){opacity:1;pointer-events:auto}
 [data-vega-theme="haneoka"] .haneoka-quickbar>button{min-height:30px;border:0;border-radius:2px;background:transparent;padding:4px 12px;font-size:clamp(11px,1.85cqh,17px);color:#edf3ffdb;pointer-events:inherit}
 [data-vega-theme="haneoka"] .haneoka-quickbar>button+button::before{content:"";position:absolute;margin-left:-24px;height:10px;width:1px;background:#cadbff24;pointer-events:none}
