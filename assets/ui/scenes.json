@@ -591,7 +591,7 @@
                     ],
                     [
                       184.0,
-                      265.0
+                      285.0
                     ],
                     [
                       800.0,
@@ -608,6 +608,132 @@
                   ],
                   "children": [
                     {
+                      "name": "Line",
+                      "active": true,
+                      "rect": [
+                        [
+                          0.0,
+                          1.0
+                        ],
+                        [
+                          0.0,
+                          1.0
+                        ],
+                        [
+                          600.2240600585938,
+                          -77.5999984741211
+                        ],
+                        [
+                          1202.1680908203125,
+                          13.0
+                        ],
+                        [
+                          0.5,
+                          1.0
+                        ]
+                      ],
+                      "scale": [
+                        1.0,
+                        1.0
+                      ],
+                      "gradient": {
+                        "angle": 0.0,
+                        "keys": {
+                          "atime0": 0,
+                          "atime1": 32768,
+                          "atime2": 65535,
+                          "atime3": 0,
+                          "atime4": 0,
+                          "atime5": 0,
+                          "atime6": 0,
+                          "atime7": 0,
+                          "ctime0": 0,
+                          "ctime1": 65535,
+                          "ctime2": 0,
+                          "ctime3": 0,
+                          "ctime4": 0,
+                          "ctime5": 0,
+                          "ctime6": 0,
+                          "ctime7": 0,
+                          "key0": {
+                            "a": 0.6980392336845398,
+                            "b": 1.0,
+                            "g": 0.7098039388656616,
+                            "r": 0.4470588266849518
+                          },
+                          "key1": {
+                            "a": 0.4000000059604645,
+                            "b": 0.9176470637321472,
+                            "g": 1.0,
+                            "r": 0.7764706015586853
+                          },
+                          "key2": {
+                            "a": 0.0,
+                            "b": 0.0,
+                            "g": 0.0,
+                            "r": 0.0
+                          },
+                          "key3": {
+                            "a": 0.0,
+                            "b": 0.0,
+                            "g": 0.0,
+                            "r": 0.0
+                          },
+                          "key4": {
+                            "a": 0.0,
+                            "b": 0.0,
+                            "g": 0.0,
+                            "r": 0.0
+                          },
+                          "key5": {
+                            "a": 0.0,
+                            "b": 0.0,
+                            "g": 0.0,
+                            "r": 0.0
+                          },
+                          "key6": {
+                            "a": 0.0,
+                            "b": 0.0,
+                            "g": 0.0,
+                            "r": 0.0
+                          },
+                          "key7": {
+                            "a": 0.0,
+                            "b": 0.0,
+                            "g": 0.0,
+                            "r": 0.0
+                          },
+                          "m_ColorSpace": 0,
+                          "m_Mode": 0,
+                          "m_NumAlphaKeys": 3,
+                          "m_NumColorKeys": 2
+                        }
+                      },
+                      "image": {
+                        "asset": "sp_adv_line_8876981396063715450",
+                        "color": [
+                          1.0,
+                          1.0,
+                          1.0,
+                          1.0
+                        ],
+                        "mode": 1,
+                        "preserveAspect": true,
+                        "fillCenter": true,
+                        "border": [
+                          0.0,
+                          15.0,
+                          0.0,
+                          15.0
+                        ],
+                        "size": [
+                          32.0,
+                          13.0
+                        ]
+                      },
+                      "children": []
+                    },
+                    {
                       "name": "Back",
                       "active": true,
                       "rect": [
@@ -621,7 +747,7 @@
                         ],
                         [
                           0.0,
-                          0.0
+                          -26.899993896484375
                         ],
                         [
                           0.0,
@@ -872,7 +998,7 @@
             1.0
           ],
           "image": {
-            "asset": "sp_white_4x4_-1999143461972380401",
+            "asset": "WhiteRect_258144246005254427",
             "color": [
               0.0,
               0.0,
@@ -883,10 +1009,10 @@
             "preserveAspect": false,
             "fillCenter": true,
             "border": [
-              0.0,
-              0.0,
-              0.0,
-              0.0
+              1.0,
+              1.0,
+              1.0,
+              1.0
             ],
             "size": [
               4.0,
@@ -1163,7 +1289,7 @@
                   0.0
                 ],
                 [
-                  0.0,
+                  1140.0,
                   0.0
                 ],
                 [
@@ -1189,7 +1315,7 @@
                 "controlHeight": true
               },
               "fit": [
-                2,
+                0,
                 2
               ],
               "children": [
@@ -1224,7 +1350,7 @@
                   ],
                   "text": {
                     "value": "",
-                    "size": 40.0,
+                    "size": 36.0,
                     "autoSize": false,
                     "minSize": 18.0,
                     "maxSize": 36.0,
@@ -1237,7 +1363,7 @@
                     ],
                     "characterSpacing": 2.0,
                     "lineSpacing": -54.0,
-                    "horizontal": 1,
+                    "horizontal": 2,
                     "vertical": 256,
                     "font": "A-OTF-ShinGoPr6N-Regular SDF",
                     "material": "A-OTF-ShinGoPr6N-Regular - OutlineLightGray"
