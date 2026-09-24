@@ -1,3 +1,4 @@
+import { bindHaneokaViewport } from "./viewport.js";
 import { createAdvTextRenderValue, type VegaDisposable, type VegaUiSlotContext } from "@haneoka/vega/plugin";
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { VEGA_RICH_TEXT_SERVICE } from "@haneoka/vega-plugin-richtext";
@@ -13,6 +14,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
   root.className = "haneoka-story-ui";
   root.setAttribute("aria-live", "polite");
   host.append(root);
+  const viewport = bindHaneokaViewport(host, context);
   const richText = createHaneokaRichTextPresenter(
     context.services(VEGA_RICH_TEXT_SERVICE),
     createHaneokaSdfBinding(document, context.resources, context.signal),
@@ -221,6 +223,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
   let frame = 0;
   const tick = () => {
     if (disposed || context.signal.aborted) return;
+    viewport.update();
     refresh();
     frame = document.defaultView?.requestAnimationFrame(tick) ?? 0;
   };
@@ -229,6 +232,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
   return {
     dispose() {
       disposed = true;
+      viewport.dispose();
       document.defaultView?.cancelAnimationFrame(frame);
       events.abort();
       unsubscribe?.();

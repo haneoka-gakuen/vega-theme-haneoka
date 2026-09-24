@@ -1,3 +1,4 @@
+import { bindHaneokaViewport } from "./viewport.js";
 import { resolveEase } from "@haneoka/vega/renderer-kit";
 import { createHaneokaSdfBinding } from "./typography.js";
 import { createHaneokaMenuEntry } from "./menuEntry.js";
@@ -25,6 +26,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   root.className = "haneoka-controls";
   root.hidden = true;
   host.append(root);
+  const viewport = bindHaneokaViewport(host, context);
   const font = createHaneokaShellTypography(context),
     events = new AbortController(),
     stopProgress = mountHaneokaProgress(host, context);
@@ -201,6 +203,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   });
   const update = () => {
     if (disposed || context.signal.aborted) return;
+    viewport.update();
     render();
     frame = document.defaultView?.requestAnimationFrame(update) ?? 0;
   };
@@ -208,6 +211,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   return {
     dispose() {
       disposed = true;
+      viewport.dispose();
       events.abort();
       document.defaultView?.cancelAnimationFrame(frame);
       clearTimeout(toastTimer);
