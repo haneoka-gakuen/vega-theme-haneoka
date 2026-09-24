@@ -335,11 +335,14 @@ export { HANEOKA_CONTROLS_ID, HANEOKA_THEME_CSS, mountHaneokaControls, mountHane
 export {
   createHaneokaThemeHostPlugin,
   createHaneokaThemeAssetsPlugin,
+  createHaneokaStorySequencePlugin,
   HANEOKA_THEME_ASSETS,
   type HaneokaThemeAssetProvider,
   HANEOKA_THEME_HOST,
+  HANEOKA_STORY_SEQUENCE,
   type HaneokaThemeAssets,
   type HaneokaThemeHost,
   type HaneokaThemeHostSnapshot,
+  type HaneokaStorySequenceControl,
 } from "./host.js";
 export default vegaHaneokaTheme;

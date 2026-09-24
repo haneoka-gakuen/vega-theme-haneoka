@@ -110,6 +110,28 @@ export interface HaneokaThemeHost extends HaneokaThemeAssetProvider {
  */
 export const HANEOKA_THEME_HOST = defineVegaService<HaneokaThemeHost>("haneoka.theme-host.v1");
 
+export interface HaneokaStorySequenceControl {
+  readonly continuous: boolean;
+  toggleContinuous(): void;
+  interrupt(): void;
+  subscribe(listener: () => void): VegaDisposable;
+}
+
+export const HANEOKA_STORY_SEQUENCE = defineVegaService<HaneokaStorySequenceControl>("haneoka.story-sequence.v1");
+
+export const createHaneokaStorySequencePlugin = (control: HaneokaStorySequenceControl): VegaPlugin =>
+  defineVegaPlugin({
+    manifest: {
+      id: "haneoka.story-sequence",
+      name: "Haneoka Story Sequence",
+      version: "0.1.0",
+      apiVersion: 1,
+    },
+    setup(context) {
+      context.provide(HANEOKA_STORY_SEQUENCE, control);
+    },
+  });
+
 export const createHaneokaThemeHostPlugin = (host: HaneokaThemeHost): VegaPlugin =>
   defineVegaPlugin({
     manifest: {
