@@ -1,12 +1,33 @@
 export type HaneokaUiLocale = "en" | "ja" | "zh-CN" | "zh-TW" | "ko";
 
-export function haneokaUiLocale(language: string, document: Document): HaneokaUiLocale {
-  const requested =
-    language === "auto" ? document.documentElement.lang || document.defaultView?.navigator.language || "en" : language;
-  if (/^zh/iu.test(requested)) return /TW|HK|Hant/iu.test(requested) ? "zh-TW" : "zh-CN";
-  if (/^ja/iu.test(requested)) return "ja";
-  if (/^ko/iu.test(requested)) return "ko";
+export type HaneokaTextLocale = "en" | "ja" | "zh-Hans" | "zh-Hant" | "ko";
+
+const languageSource = (language: string, document: Document): string => {
+  const requested = language.trim().replaceAll("_", "-");
+  if (requested && requested.toLowerCase() !== "auto") return requested;
+  return document.documentElement.lang || document.defaultView?.navigator.language || "en";
+};
+
+/** Resolve authored text language first, then the host document language. */
+export function haneokaTextLocale(language: string | undefined, document: Document): HaneokaTextLocale {
+  const requested = languageSource(language ?? "", document);
+  if (/^ja(?:-|$)/iu.test(requested)) return "ja";
+  if (/^ko(?:-|$)/iu.test(requested)) return "ko";
+  if (/^zh(?:-|$)/iu.test(requested)) {
+    const subtags = requested.toLowerCase().split("-");
+    if (subtags.includes("hant")) return "zh-Hant";
+    if (subtags.includes("hans")) return "zh-Hans";
+    return subtags.some((tag) => ["tw", "hk", "mo"].includes(tag)) ? "zh-Hant" : "zh-Hans";
+  }
   return "en";
+}
+
+export function haneokaUiLocale(language: string, document: Document): HaneokaUiLocale {
+  const locale = haneokaTextLocale(language, document);
+  if (locale === "zh-Hant") return "zh-TW";
+  if (locale === "ja") return "ja";
+  if (locale === "ko") return "ko";
+  return locale === "zh-Hans" ? "zh-CN" : "en";
 }
 
 export const HANEOKA_UI_TEXT = {

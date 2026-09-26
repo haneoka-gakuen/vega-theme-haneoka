@@ -22,9 +22,9 @@ export const HANEOKA_THEME_CSS = String.raw`
     rgb(24 18 41 / 65.33%) 90%,
     rgb(24 18 41 / 70%) 100%
   );
-  --haneoka-font: "Roboto Variable", "Noto Sans JP Variable",
+  --haneoka-font: var(--app-font, "Roboto Variable", "Noto Sans JP Variable",
     "Hiragino Kaku Gothic ProN", "Noto Sans SC Variable", "PingFang SC",
-    "Noto Sans KR Variable", "Apple SD Gothic Neo", sans-serif;
+    "Noto Sans KR Variable", "Apple SD Gothic Neo", sans-serif);
   --haneoka-game-text: #fff;
   --haneoka-game-shadow: 0 1px 3px rgb(0 0 0 / 95%),
     0 0 6px rgb(0 0 0 / 72%);
@@ -131,21 +131,106 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-scene-node { background-repeat:no-repeat; pointer-events:none; }
 
 /* Native ADV indicator animations ---------------------------------------- */
-/* TalkNextIndicator: 0.917s loop, anchoredPosition.y 76→68 at 41.7%. */
-@keyframes haneoka-next-bob { 0% { transform:translateY(0); } 21.8% { transform:translateY(0.74cqh); } 41.8%, 100% { transform:translateY(0); } }
-[data-vega-theme="haneoka"] .haneoka-scene > [data-node="TalkNextIndicator"] { animation:haneoka-next-bob .9167s ease-in-out infinite; }
-/* AutoNext: 2.0s loop; the glow layer spins a full turn with a soft pulse. */
-@keyframes haneoka-auto-spin { from { transform:rotate(360deg); } to { transform:rotate(0deg); } }
-[data-vega-theme="haneoka"] .haneoka-scene > [data-node="AutoIcon"] { animation:haneoka-auto-spin 2s ease-in-out infinite; }
-/* AdvTitle Play: 6s one-shot — alpha 0→1 by 1s, exit slide −300 + fade at 6s.
-   AdvLocation Play: 2.5s one-shot — alpha 0→1 by 0.5s, fade 2.3→2.5, exit −300. */
-/* AdvTitle Play: alpha=1 at t=0, hold 5s, fade 5→6s with slide x 0→-300 */
-@keyframes haneoka-title-out { 0% { opacity:1; transform:translateX(0); } 83.3% { opacity:1; transform:translateX(0); } 100% { opacity:0; transform:translateX(-27.78cqh); } }
-/* AdvLocation Play: alpha 0→1 @0.3s, x 300→0 @0.5s, hold, fade 2.0→2.3s, x 0→-300 2.0→2.5s */
-@keyframes haneoka-location-cycle { 0% { opacity:0; transform:translateX(27.78cqh); } 12% { opacity:1; } 20% { transform:translateX(0); } 80% { opacity:1; transform:translateX(0); } 92% { opacity:0; } 100% { opacity:0; transform:translateX(-27.78cqh); } }
-[data-vega-theme="haneoka"] .haneoka-caption-enter-title { opacity:1; }
-[data-vega-theme="haneoka"] .haneoka-caption-exit-title { animation:haneoka-title-out 1s ease-in both; }
-[data-vega-theme="haneoka"] .haneoka-caption-cycle-location { animation:haneoka-location-cycle 2.5s ease-in-out both; }
+/* Unity's clip is smoothstep: cubic-bezier(.333333,0,.666667,1) is the exact
+   3u²−2u³ curve. Timing functions are attached to each authored segment. */
+@keyframes haneoka-next-bob {
+  0% { translate:0 0; animation-timing-function:cubic-bezier(.333333,0,.666667,1); }
+  21.8% { translate:0 0.740741cqh; animation-timing-function:cubic-bezier(.333333,0,.666667,1); }
+  41.8% { translate:0 0; animation-timing-function:linear; }
+  100% { translate:0 0; }
+}
+[data-vega-theme="haneoka"] .haneoka-scene [data-animation="next-bob"] { animation:haneoka-next-bob .9166667s linear infinite; }
+/* The Unity clip is z=0→359 with an Animator speed of −1. Unity UI has a
+   positive-up y axis while CSS has a positive-down screen axis, so the
+   visually equivalent CSS direction is increasing positive rotation. */
+@keyframes haneoka-auto-spin {
+  0% { rotate:0deg; animation-timing-function:cubic-bezier(.333333,0,.666667,1); }
+  100% { rotate:359deg; }
+}
+[data-vega-theme="haneoka"] .haneoka-scene [data-animation="auto-spin"] { animation:haneoka-auto-spin 2s linear infinite; }
+/* AdvTitle Play: alpha=1/x=0 at t=0, hold through 5s, then fade and slide
+   to alpha=0/x=−300 at t=6s. Separate property animations retain the exact
+   windows when CSS interpolates other properties at different offsets. */
+@keyframes haneoka-title-alpha {
+  0% { opacity:1; animation-timing-function:linear; }
+  83.333333% { opacity:1; animation-timing-function:cubic-bezier(.333333,0,.666667,1); }
+  100% { opacity:0; }
+}
+@keyframes haneoka-title-translate {
+  0%, 83.333333% { translate:0 0; animation-timing-function:cubic-bezier(.333333,0,.666667,1); }
+  100% { translate:-27.777778cqh 0; }
+}
+/* AdvLocation Play: alpha 0→1 @0.3s, x +300→0 @0.5s, hold, alpha 1→0
+   @2.3s, and x 0→−300 through 2.5s. */
+@keyframes haneoka-location-alpha {
+  0% { opacity:0; animation-timing-function:cubic-bezier(.333333,0,.666667,1); }
+  12% { opacity:1; animation-timing-function:linear; }
+  80% { opacity:1; animation-timing-function:cubic-bezier(.333333,0,.666667,1); }
+  92% { opacity:0; animation-timing-function:linear; }
+  100% { opacity:0; }
+}
+@keyframes haneoka-location-translate {
+  0% { translate:27.777778cqh 0; animation-timing-function:cubic-bezier(.333333,0,.666667,1); }
+  20% { translate:0 0; animation-timing-function:linear; }
+  80% { translate:0 0; animation-timing-function:cubic-bezier(.333333,0,.666667,1); }
+  100% { translate:-27.777778cqh 0; }
+}
+[data-vega-theme="haneoka"] .haneoka-caption-cycle-title {
+  animation:
+    haneoka-title-alpha var(--haneoka-caption-duration, 6s) linear both,
+    haneoka-title-translate var(--haneoka-caption-duration, 6s) linear both;
+}
+[data-vega-theme="haneoka"] .haneoka-caption-cycle-location {
+  animation:
+    haneoka-location-alpha 2.5s linear both,
+    haneoka-location-translate 2.5s linear both;
+}
+
+/* DOM text keeps the native material distinction even when rich-text emits
+   nested spans. Default dialogue has no stroke; only authored outline
+   materials receive the CSS approximation. */
+[data-vega-theme="haneoka"] [data-haneoka-material="default"],
+[data-vega-theme="haneoka"] [data-haneoka-material="default"] :where(*) { text-shadow:none; }
+[data-vega-theme="haneoka"] [data-haneoka-material="outline-adv"],
+[data-vega-theme="haneoka"] [data-haneoka-material="outline-adv"] :where(*) {
+  text-shadow:0 0 2px #1a1a2e, 0 0 4px #1a1a2e, 1px 1px 2px #1a1a2e, -1px -1px 2px #1a1a2e;
+}
+[data-vega-theme="haneoka"] [data-haneoka-material="outline-light"],
+[data-vega-theme="haneoka"] [data-haneoka-material="outline-light"] :where(*) {
+  text-shadow:0 0 2px rgb(180 180 190 / 60%), 1px 1px 1px rgb(160 160 170 / 40%);
+}
+[data-vega-theme="haneoka"] [data-haneoka-material="outline-button"],
+[data-vega-theme="haneoka"] [data-haneoka-material="outline-button"] :where(*) {
+  text-shadow:0 0 2px rgb(30 40 70 / 70%), 1px 1px 2px rgb(30 40 70 / 50%);
+}
+
+/* The host owns the main locale contracts. These fallbacks mirror its
+   Fontsource families when the theme is mounted without that host CSS. */
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui, .haneoka-controls, .vega-shell):lang(en),
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui > .haneoka-scene, .haneoka-controls, .vega-shell) :where([lang]):lang(en) {
+  --haneoka-font:var(--app-font, "Roboto Variable", "Noto Sans Variable", "Noto Sans JP Variable", "Noto Sans SC Variable", "Noto Sans KR Variable", "Helvetica Neue", Arial, sans-serif);
+  font-family:var(--haneoka-font);
+}
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui, .haneoka-controls, .vega-shell):lang(ja),
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui > .haneoka-scene, .haneoka-controls, .vega-shell) :where([lang]):lang(ja) {
+  --haneoka-font:var(--app-font, "Roboto Variable", "Noto Sans JP Variable", "Hiragino Kaku Gothic ProN", sans-serif);
+  font-family:var(--haneoka-font);
+}
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui, .haneoka-controls, .vega-shell):is(:lang(zh-CN), :lang(zh-Hans)),
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui > .haneoka-scene, .haneoka-controls, .vega-shell) :where([lang]):is(:lang(zh-CN), :lang(zh-Hans)) {
+  --haneoka-font:var(--app-font, "Roboto Variable", "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", sans-serif);
+  font-family:var(--haneoka-font);
+}
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui, .haneoka-controls, .vega-shell):is(:lang(zh-TW), :lang(zh-Hant)),
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui > .haneoka-scene, .haneoka-controls, .vega-shell) :where([lang]):is(:lang(zh-TW), :lang(zh-Hant)) {
+  --haneoka-font:var(--app-font, "Roboto Variable", "Noto Sans TC Variable", "PingFang TC", "Microsoft JhengHei", sans-serif);
+  font-family:var(--haneoka-font);
+}
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui, .haneoka-controls, .vega-shell):lang(ko),
+[data-vega-theme="haneoka"] :is(.haneoka-story-ui > .haneoka-scene, .haneoka-controls, .vega-shell) :where([lang]):lang(ko) {
+  --haneoka-font:var(--app-font, "Roboto Variable", "Noto Sans KR Variable", "Apple SD Gothic Neo", sans-serif);
+  font-family:var(--haneoka-font);
+}
 [data-vega-theme="haneoka"] .haneoka-native-choice {position:relative;flex-shrink:0;width:100%;border:0;padding:0;background:transparent;color:inherit;pointer-events:auto;cursor:pointer}
 [data-vega-theme="haneoka"] .haneoka-native-choice:disabled {opacity:.45;cursor:default}
 [data-vega-theme="haneoka"] .haneoka-native-choice:focus-visible {outline:2px solid white;outline-offset:4px}

@@ -16,13 +16,7 @@ const BANKS = new WeakMap<object, HaneokaFontBank>();
 const decoder = new TextDecoder();
 const fallbackOrder: readonly FontName[] = ["symbols", "chinese", "korean"];
 
-/**
- * Native LocalizeManager swaps the TMP font asset per language: ja/en keep
- * ShinGoPr6N, zh-Hans uses FZLanTingHei, zh-Hant uses the full NotoSansJP
- * "everything" font (the same asset the chat windows use), and ko uses
- * Pretendard. Falling through the other families afterwards reproduces the
- * embedded-runtime glyph fallback instead of the browser default font.
- */
+/** Fallback families indexed by text language for story and phone text. */
 const LANGUAGE_FONT_CHAINS: Readonly<Record<string, readonly FontName[]>> = {
   ja: ["dialogue", "chat", "symbols", "chinese", "korean"],
   en: ["dialogue", "chat", "symbols", "chinese", "korean"],
@@ -53,7 +47,7 @@ const elementLang = (element: HTMLElement): string => {
     if (value) return value;
     source = source.parentElement;
   }
-  return "";
+  return element.ownerDocument.documentElement.lang || element.ownerDocument.defaultView?.navigator.language || "";
 };
 
 export const chainForLanguage = (lang: string, phone: boolean): readonly FontName[] => {
@@ -347,8 +341,8 @@ export function createHaneokaSdfBinding(
       fontSize,
       ruby: { scale: 0.5, verticalOffset: 1, alignment: "annotation" as const },
       maxWidth: nowrap || control ? Infinity : width,
-      characterSpacing: 0,
-      lineSpacing: 0,
+      characterSpacing: profile?.characterSpacing ?? (speaker ? 2 : 0),
+      lineSpacing: profile?.lineSpacing ?? 0,
       bold: Number(style.fontWeight) >= 600,
       color: parseColor(style.color),
       align: control
@@ -471,6 +465,7 @@ export function createHaneokaSdfBinding(
   const release = (element: HTMLElement) => {
     observer?.unobserve(element);
     const entry = entries.get(element);
+    if (!entry) return;
     entry?.spacer.remove();
     entry?.accessible.remove();
     entries.delete(element);

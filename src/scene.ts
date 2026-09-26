@@ -153,6 +153,14 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
     const element = document.createElement("div");
     element.className = "haneoka-scene-node";
     element.dataset.node = definition.name;
+    if (
+      path.endsWith("/TalkArea/Content/TalkNextIndicator") ||
+      path.endsWith("/TalkArea/Indicator/TalkNextIndicator")
+    ) {
+      element.dataset.animation = "next-bob";
+    } else if (path.endsWith("/TalkArea/Content/AutoIcon")) {
+      element.dataset.animation = "auto-spin";
+    }
     element.hidden = !definition.active;
     elements.set(path, element);
     definitions.set(path, definition);
@@ -235,9 +243,25 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
       style.fontStyle = text.style & 2 ? "italic" : "normal";
       style.color = color(text.color);
       style.textAlign = text.horizontal === 2 ? "center" : text.horizontal === 4 ? "right" : "left";
+      style.letterSpacing = `${text.characterSpacing / 100}em`;
+      // ShinGo's authored face uses an 80-unit line height at 40 points.
+      // TMP adds lineSpacing in hundredths of the current font size.
+      style.lineHeight = text.font.includes("A-OTF-ShinGo")
+        ? String(Math.max(0, 2 + text.lineSpacing / 100))
+        : "normal";
+      style.display = "flex";
+      style.flexDirection = "column";
+      style.justifyContent = text.vertical === 512 ? "center" : text.vertical === 1024 ? "flex-end" : "flex-start";
+      element.dataset.haneokaMaterial = text.material.includes("OutlineAdvCommon")
+        ? "outline-adv"
+        : text.material.includes("OutlineLightGray")
+          ? "outline-light"
+          : text.material.includes("OutlineButtonText")
+            ? "outline-button"
+            : "default";
       style.whiteSpace = "pre-wrap";
-      // Block display: pre-wrap multi-line text needs normal line-height between
-      // lines. Flex-column turns each newline into a zero-gap flex item (overlap).
+      // One block owns all inline runs so vertical alignment never separates
+      // rich-text spans or explicit line breaks into individual flex items.
       // Native TMP outline materials → CSS text-shadow replicas.
       // OutlineAdvCommon: dark outline on all sides (name plates, captions).
       // OutlineLightGray: subtle light-gray outline (center talk text).
@@ -249,7 +273,12 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
       } else if (text.material?.includes("OutlineButtonText")) {
         style.textShadow = "0 0 2px rgb(30 40 70 / 70%), 1px 1px 2px rgb(30 40 70 / 50%)";
       }
-      element.textContent = text.value;
+      const content = document.createElement("div");
+      content.dataset.haneokaTextContent = "true";
+      content.style.minWidth = "0";
+      content.style.flexShrink = "0";
+      content.textContent = text.value;
+      element.append(content);
     }
     for (const child of definition.children) build(child, element, `${path}/${child.name}`, definition);
   };

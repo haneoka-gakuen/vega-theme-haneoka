@@ -1,5 +1,4 @@
 import { createHaneokaShellTypography } from "./shellTypography.js";
-import { prepareHaneokaFonts } from "./typography.js";
 import { chatDefaultDataRoot, chatIconImagePath, isAdvChatIconAssetName, iterateAdvCommands } from "@haneoka/vega";
 import {
   ADV_COMMAND,
@@ -111,7 +110,8 @@ const haneokaThemeResources = (
   const rootModes = new Map<string, Set<number>>();
   const chatImages = new Set<string>();
   let usesPhoneUi = false;
-  let activeRoot = "";
+  const defaultRoot = chatDefaultDataRoot(runtime) || HANEOKA_CHAT_DATA_ROOT;
+  let activeRoot = defaultRoot;
   let activeMode = 0;
   const noteRootMode = (root: string, mode: number): void => {
     const normalized = root.replace(/\/+$/u, "");
@@ -141,7 +141,7 @@ const haneokaThemeResources = (
       if (commandCode === ADV_COMMAND.ChatWindow) {
         const parsedMode = Number(command.params?.[1] ?? 0);
         activeMode = Number.isFinite(parsedMode) ? Math.max(0, Math.trunc(parsedMode)) : 0;
-        if (root) activeRoot = root;
+        activeRoot = root || defaultRoot;
       }
       noteRootMode(root || activeRoot, activeMode);
       const referencedImages = [
@@ -150,7 +150,7 @@ const haneokaThemeResources = (
         [commandCode === ADV_COMMAND.ChatStamp ? command.targetAssetName : undefined, "stamp"],
       ] as const;
       for (const [value, kind] of referencedImages) {
-        const resolved = resolveThemeChatImage(host, runtime, value, kind, root ?? "");
+        const resolved = resolveThemeChatImage(host, runtime, value, kind, root || activeRoot);
         if (resolved) chatImages.add(resolved);
       }
     }
@@ -200,11 +200,11 @@ const haneokaThemeResources = (
         add(texture(source, `Haneoka chat ${name}`));
       }
     }
-    const defaultRoot = String(chatAssets?.defaultDataRoot || HANEOKA_CHAT_DATA_ROOT).replace(/\/+$/u, "");
-    const lineRoot = chatLineDataRoot(defaultRoot);
-    const commonSpritesRoot = chatCommonSpritesRoot(defaultRoot);
+    const declaredDefaultRoot = String(chatAssets?.defaultDataRoot || HANEOKA_CHAT_DATA_ROOT).replace(/\/+$/u, "");
+    const lineRoot = chatLineDataRoot(declaredDefaultRoot);
+    const commonSpritesRoot = chatCommonSpritesRoot(declaredDefaultRoot);
     if (rootModes.size === 0) {
-      for (const mode of usedModes) noteRootMode(defaultRoot, mode);
+      for (const mode of usedModes) noteRootMode(declaredDefaultRoot, mode);
     }
     for (const [root, modes] of rootModes) {
       const skin = haneokaChatSkin("", root);
@@ -223,8 +223,8 @@ const haneokaThemeResources = (
         add(texture(resolveHostSource(host, skin ? (skin.lock ?? "") : `${root}/lock.png`), "Haneoka chat lock"));
       }
     }
-    if (usedModes.has(0) && defaultRoot && assets?.chatBackgroundFallback == null) {
-      add(texture(resolveHostSource(host, `${defaultRoot}/back.png`), "Haneoka fallback chat background"));
+    if (usedModes.has(0) && declaredDefaultRoot && assets?.chatBackgroundFallback == null) {
+      add(texture(resolveHostSource(host, `${declaredDefaultRoot}/back.png`), "Haneoka fallback chat background"));
     }
     if ((usedModes.has(0) || usedModes.has(2)) && assets?.chatTextBox == null) {
       add(
@@ -234,7 +234,7 @@ const haneokaThemeResources = (
         ),
       );
     }
-    if (defaultRoot && usedModes.has(0)) {
+    if (declaredDefaultRoot && usedModes.has(0)) {
       for (const [key, file] of [
         ["chatComposerPlus", "ADVChatIconLine_Plus.png"],
         ["chatComposerPhoto", "ADVChatIconLine_Photo.png"],
@@ -284,7 +284,6 @@ export const vegaHaneokaTheme = defineVegaPlugin({
         accentSecondary: "#ef8aa7",
       },
       cssText: HANEOKA_THEME_CSS,
-      prepareStoryResources: prepareHaneokaFonts,
       enumerateStoryResources(preparation) {
         const legacyHost = themeHost();
         const host = context.service(HANEOKA_THEME_ASSETS) ?? legacyHost;

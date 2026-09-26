@@ -27,6 +27,13 @@ const sourceSignature = (value: unknown): string => {
   return JSON.stringify(["adv", sourceText(value)]);
 };
 
+const sourceLanguage = (value: unknown): string => {
+  if (value && typeof value === "object" && "language" in value && typeof value.language === "string") {
+    return value.language;
+  }
+  return "";
+};
+
 export const createHaneokaRichTextPresenter = (
   service: VegaRichTextService | undefined,
   sdf?: HaneokaSdfBinding,
@@ -43,6 +50,14 @@ export const createHaneokaRichTextPresenter = (
   return {
     render(element, value, immediate = false, fullText) {
       element.dir = "auto";
+      const authoredLanguage = sourceLanguage(value);
+      if (authoredLanguage) element.lang = authoredLanguage;
+      else if (!element.lang.trim()) {
+        element.lang =
+          element.parentElement?.closest("[lang]")?.getAttribute("lang") ||
+          element.ownerDocument.documentElement.lang ||
+          "und";
+      }
       const signature = sourceSignature(value);
       const format = value && typeof value === "object" && "format" in value ? value.format : "adv";
       if (sdf && (format === "adv" || format === "text") && sdf.render(element, sourceText(value), fullText)) {
@@ -53,6 +68,7 @@ export const createHaneokaRichTextPresenter = (
       }
       if (format !== "adv" && format !== "text") sdf?.release(element);
       if (!immediate && signatures.get(element) === signature && (handles.has(element) || !sdf)) return;
+      const target = element.querySelector<HTMLElement>(":scope > [data-haneoka-text-content]") ?? element;
       const handle = handles.get(element);
       if (service && handle?.update) {
         try {
@@ -66,13 +82,13 @@ export const createHaneokaRichTextPresenter = (
         release(element);
       }
       if (!service) {
-        element.removeAttribute("data-vega-rich-text-error");
-        element.removeAttribute("data-vega-rich-text-format");
-        element.textContent = sourceText(value);
+        target.removeAttribute("data-vega-rich-text-error");
+        target.removeAttribute("data-vega-rich-text-format");
+        target.textContent = sourceText(value);
         signatures.set(element, signature);
         return;
       }
-      handles.set(element, service.render(element, value, { defaultFormat: "adv", immediate }));
+      handles.set(element, service.render(target, value, { defaultFormat: "adv", immediate }));
       signatures.set(element, signature);
     },
     releaseWithin(root) {

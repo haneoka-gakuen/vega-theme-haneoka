@@ -6,12 +6,13 @@ import { createHaneokaRichTextPresenter } from "./rich-text.js";
 import { createHaneokaSdfBinding } from "./typography.js";
 import { createHaneokaScene, loadHaneokaScenes, type HaneokaScene } from "./scene.js";
 import { mountHaneokaPhone } from "./phone.js";
-import { HANEOKA_UI_TEXT, haneokaUiLocale } from "./locale.js";
+import { HANEOKA_UI_TEXT, haneokaTextLocale, haneokaUiLocale } from "./locale.js";
 
 export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContext): VegaDisposable => {
   const document = host.ownerDocument,
     root = document.createElement("section");
   root.className = "haneoka-story-ui";
+  root.lang = haneokaTextLocale("", document);
   root.setAttribute("aria-live", "polite");
   host.append(root);
   const viewport = bindHaneokaViewport(host, context);
@@ -40,6 +41,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
   let labels = HANEOKA_UI_TEXT[haneokaUiLocale("auto", document)],
     disposed = false;
   const scenes = new Map<string, HaneokaScene>();
+  const captionDisposers: Array<() => void> = [];
   let choiceScenes: HaneokaScene[] = [],
     choiceKey = "";
   const advance = (event: Event) => {
@@ -101,25 +103,34 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
         subtitles = scenes.get("subtitles")!,
         choiceContainer = scenes.get("choices")!.get("Choices");
       choiceContainer.replaceChildren();
-      // AdvTitle/AdvLocation Play are authored one-shots (6.0s / 2.5s) with
-      // slide-in and a −300 exit slide; reproduce the enter/exit phases.
+      // AdvTitle/AdvLocation Play are authored one-shots (6.0s / 2.5s). The
+      // CSS animation and its hide timer share one clock so title does not
+      // hold for six seconds and then hold again before its exit.
       const captionState = (scene: HaneokaScene, kind: "title" | "location") => {
         let key = "",
           until = 0,
           phase: "hidden" | "showing" | "leaving" = "hidden",
           timer = 0;
         const cycleClass = `haneoka-caption-cycle-${kind}`;
-        const exitClass = `haneoka-caption-exit-${kind}`;
-        const exitMs = kind === "title" ? 1000 : 500;
-        const totalMs = kind === "title" ? 6000 : 2500;
+        const nativeDurationMs = kind === "title" ? 6000 : 2500;
         const hideNow = () => {
           if (timer) document.defaultView?.clearTimeout(timer);
           timer = 0;
-          scene.root.classList.remove(cycleClass, exitClass);
+          scene.root.classList.remove(cycleClass);
+          scene.root.style.removeProperty("--haneoka-caption-duration");
           scene.root.hidden = true;
           phase = "hidden";
           key = "";
         };
+        const finish = () => {
+          if (timer) document.defaultView?.clearTimeout(timer);
+          timer = 0;
+          if (phase !== "showing") return;
+          scene.root.classList.remove(cycleClass);
+          scene.root.hidden = true;
+          phase = "leaving";
+        };
+        captionDisposers.push(hideNow);
         return {
           hideNow,
           update(text: string, visible: boolean, now: number, restored: boolean, durationMs = 0) {
@@ -127,22 +138,19 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
             if (text !== key || restored) {
               if (timer) document.defaultView?.clearTimeout(timer);
               key = text;
-              until = now + (durationMs > 0 ? durationMs : totalMs);
+              const totalMs = durationMs > 0 ? durationMs : nativeDurationMs;
+              until = now + totalMs;
               phase = "showing";
-              scene.root.classList.remove(cycleClass, exitClass);
+              scene.root.classList.remove(cycleClass);
               scene.root.hidden = false;
+              if (kind === "title") scene.root.style.setProperty("--haneoka-caption-duration", `${totalMs}ms`);
               void scene.root.offsetWidth;
-              if (kind === "location") scene.root.classList.add(cycleClass);
+              scene.root.classList.add(cycleClass);
+              timer = document.defaultView?.setTimeout(finish, totalMs) ?? 0;
               return;
             }
             if (now >= until && phase === "showing") {
-              phase = "leaving";
-              if (kind === "title") scene.root.classList.add(exitClass);
-              timer =
-                document.defaultView?.setTimeout(() => {
-                  timer = 0;
-                  if (phase === "leaving") hideNow();
-                }, exitMs) ?? 0;
+              finish();
             }
           },
         };
@@ -282,6 +290,8 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
       viewport.dispose();
       document.defaultView?.cancelAnimationFrame(frame);
       events.abort();
+      for (const disposeCaption of captionDisposers) disposeCaption();
+      captionDisposers.length = 0;
       unsubscribe?.();
       if (typeof subscription === "function") void subscription();
       else if (subscription && "dispose" in subscription) void subscription.dispose();
