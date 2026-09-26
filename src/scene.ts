@@ -239,7 +239,23 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
       style.display = "flex";
       style.flexDirection = "column";
       style.justifyContent = text.vertical === 512 ? "center" : text.vertical === 1024 ? "flex-end" : "flex-start";
-      style.lineHeight = "normal";
+      // Web-font line height: native lineSpacing is a TMP percentage of the
+      // font size (e.g. -54 = -54% of em). Convert to CSS line-height ratio:
+      // 1 + lineSpacing/100, clamped so CJK lines never collapse.
+      const lsRatio = 1 + (text.lineSpacing ?? 0) / 100;
+      style.lineHeight = String(Math.max(0.9, lsRatio));
+      style.letterSpacing = `${(text.characterSpacing ?? 0) * 0.01}em`;
+      // Native TMP outline materials → CSS text-shadow replicas.
+      // OutlineAdvCommon: dark outline on all sides (name plates, captions).
+      // OutlineLightGray: subtle light-gray outline (center talk text).
+      // OutlineButtonText: medium outline for button-adjacent labels.
+      if (text.material?.includes("OutlineAdvCommon")) {
+        style.textShadow = "0 0 2px #1a1a2e, 0 0 4px #1a1a2e, 1px 1px 2px #1a1a2e, -1px -1px 2px #1a1a2e";
+      } else if (text.material?.includes("OutlineLightGray")) {
+        style.textShadow = "0 0 2px rgb(180 180 190 / 60%), 1px 1px 1px rgb(160 160 170 / 40%)";
+      } else if (text.material?.includes("OutlineButtonText")) {
+        style.textShadow = "0 0 2px rgb(30 40 70 / 70%), 1px 1px 2px rgb(30 40 70 / 50%)";
+      }
       element.textContent = text.value;
     }
     for (const child of definition.children) build(child, element, `${path}/${child.name}`, definition);

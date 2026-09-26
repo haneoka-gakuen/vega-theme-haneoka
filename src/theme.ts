@@ -22,9 +22,19 @@ export const HANEOKA_THEME_CSS = String.raw`
     rgb(24 18 41 / 65.33%) 90%,
     rgb(24 18 41 / 70%) 100%
   );
-  --haneoka-font: "A-OTF Shin Go Pro", "Hiragino Kaku Gothic ProN",
-    "Yu Gothic", "Noto Sans CJK JP", Inter, ui-sans-serif, system-ui,
-    sans-serif;
+  --haneoka-font: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+    "PingFang SC", "Microsoft YaHei", "Noto Sans KR", "Apple SD Gothic Neo",
+    Inter, ui-sans-serif, system-ui, sans-serif;
+  --haneoka-font-ja: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+    "Noto Sans CJK JP", ui-sans-serif, system-ui, sans-serif;
+  --haneoka-font-zh-hans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei",
+    "Noto Sans CJK SC", ui-sans-serif, system-ui, sans-serif;
+  --haneoka-font-zh-hant: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+    "Noto Sans CJK TC", ui-sans-serif, system-ui, sans-serif;
+  --haneoka-font-ko: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic",
+    "Noto Sans CJK KR", ui-sans-serif, system-ui, sans-serif;
+  --haneoka-font-en: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont,
+    ui-sans-serif, system-ui, sans-serif;
   --haneoka-game-text: #fff;
   --haneoka-game-shadow: 0 1px 3px rgb(0 0 0 / 95%),
     0 0 6px rgb(0 0 0 / 72%);
@@ -117,6 +127,17 @@ export const HANEOKA_THEME_CSS = String.raw`
 }
 
 [data-vega-theme="haneoka"] .haneoka-story-ui { position:absolute; inset:0; pointer-events:none; color:white; font-family:var(--haneoka-font); }
+/* Android fullscreen: use dynamic viewport units so the URL bar hide/show
+   doesn't offset the canvas; iOS gets visual-viewport-based sizing since
+   WebKit doesn't support the Fullscreen API on arbitrary elements. */
+@supports (height: 100dvh) {
+  [data-vega-theme="haneoka"] .haneoka-story-ui { height: 100dvh; }
+}
+[data-vega-theme="haneoka"] [lang="ja"] { font-family:var(--haneoka-font-ja); }
+[data-vega-theme="haneoka"] [lang="en"] { font-family:var(--haneoka-font-en); }
+[data-vega-theme="haneoka"] [lang="zh-Hans"], [data-vega-theme="haneoka"] [lang="zh-CN"] { font-family:var(--haneoka-font-zh-hans); }
+[data-vega-theme="haneoka"] [lang="zh-Hant"], [data-vega-theme="haneoka"] [lang="zh-TW"] { font-family:var(--haneoka-font-zh-hant); }
+[data-vega-theme="haneoka"] [lang="ko"] { font-family:var(--haneoka-font-ko); }
 [data-vega-theme="haneoka"] .haneoka-center-talk-backdrop {position:absolute;inset:0;background:rgba(0,0,0,.4);pointer-events:none}
 [data-vega-theme="haneoka"] .haneoka-scene [hidden],
 [data-vega-theme="haneoka"] .haneoka-story-ui>[hidden] {display:none!important}
@@ -764,9 +785,14 @@ export const HANEOKA_THEME_CSS = String.raw`
 }
 [data-vega-theme="haneoka"] .haneoka-progress .haneoka-icon { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.6; fill: none; }
 [data-vega-theme="haneoka"] .haneoka-progress input {
-  appearance: none; flex: 1; min-width: 0; height: 28px; padding: 0; margin: 0; cursor: pointer;
+  appearance: none; -webkit-appearance: none; flex: 1 1 0%; min-width: 120px; width: 100%; height: 28px; padding: 0; margin: 0; cursor: pointer; box-sizing: border-box;
   background: linear-gradient(to right, #e2d9ff var(--haneoka-progress), #ffffff50 var(--haneoka-progress)) center / 100% 3px no-repeat;
   touch-action: pan-y;
+}
+/* iOS Safari renders <input type=range> with intrinsic width unless forced */
+@supports (-webkit-touch-callout: none) {
+  [data-vega-theme="haneoka"] .haneoka-progress input { flex: 1 1 0%; width: auto; }
+  [data-vega-theme="haneoka"] .haneoka-progress input::-webkit-slider-thumb { transform: scale(1.2); }
 }
 [data-vega-theme="haneoka"] .haneoka-progress input::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; background: #9e8cff; box-shadow: 0 0 8px #17122880; }
 [data-vega-theme="haneoka"] .haneoka-progress input::-moz-range-thumb { width: 8px; height: 8px; border-radius: 50%; border: 2px solid #fff; background: #9e8cff; }

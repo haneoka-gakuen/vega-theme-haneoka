@@ -479,53 +479,7 @@ export function createHaneokaSdfBinding(
   };
   return {
     render(element, text, fullText = text) {
-      if (/<(?:u|s|strike|mark|sprite)[\s>]/iu.test(text)) return false;
-      if (!bank.shader)
-        void bank
-          .prepareText(fullText, elementLang(element), !!element.closest(".haneoka-phone"), signal)
-          .then(refresh)
-          .catch(() => {});
-      let entry = entries.get(element);
-      if (!entry) {
-        const accessible = document.createElement("span");
-        accessible.style.cssText =
-          "position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:pre-wrap";
-        const canvas = document.createElement("canvas");
-        canvas.setAttribute("aria-hidden", "true");
-        const spacer = document.createElement("span");
-        spacer.setAttribute("aria-hidden", "true");
-        entry = {
-          source: text,
-          fullText,
-          signature: "",
-          canvas,
-          accessible,
-          spacer,
-          position: element.style.position,
-        };
-        entries.set(element, entry);
-        observer?.observe(element);
-      }
-      entry.source = text;
-      entry.fullText = fullText;
-      let rendered = false;
-      try {
-        rendered = draw(element, entry);
-      } catch (error) {
-        failed = true;
-        element.dataset.haneokaSdfError = error instanceof Error ? error.message : String(error);
-        console.warn("[Haneoka] SDF text rendering failed", error);
-        releasePainter?.();
-        painter = undefined;
-      }
-      if (!rendered && element.dataset.haneokaSdf) {
-        entry.spacer.remove();
-        entry.accessible.remove();
-        element.removeAttribute("data-haneoka-sdf");
-        element.style.position = entry.position;
-        entry.signature = "";
-      }
-      return rendered;
+      return false;
     },
     release,
     releaseWithin(root) {
