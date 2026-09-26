@@ -545,8 +545,16 @@ const resolveChatImage = (
   if (!resolved) {
     const resolveSource = (path: string): string => resolveHaneokaSourceAsset(themeHost, path);
     if (kind === "icon" && isAdvChatIconAssetName(source)) {
-      const path = chatIconImagePath(source, context.player.runtime) || source;
-      resolved = resolveSource(path);
+      const mapped = chatIconImagePath(source, context.player.runtime);
+      if (mapped) {
+        // The runtime map yields a server-absolute /assets/... URL; pass it
+        // through directly instead of routing it through the host resolver.
+        resolved = mapped;
+      }
+      if (!resolved) {
+        // No runtime mapping: try the canonical Chat/Icon/ path
+        resolved = resolveSource(`Assets/AddressableResources/Adv/Chat/Icon/${source.replace(/\.png$/u, "")}.png`);
+      }
     }
     if (!resolved) {
       const file = source.endsWith(".png") ? source : `${source}.png`;

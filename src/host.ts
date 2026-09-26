@@ -56,6 +56,10 @@ export const HANEOKA_THEME_ASSETS = defineVegaService<HaneokaThemeAssetProvider>
 
 export const resolveHaneokaSourceAsset = (provider: HaneokaThemeAssetProvider | undefined, path: string): string => {
   if (!path) return "";
+  // Server-absolute release URLs (e.g. /assets/intl/Assets/...) are already
+  // resolvable by the browser; the host resolver only understands Unity
+  // source paths. Passing them through unblocks the full chat-icon map.
+  if (/^\/assets\//u.test(path)) return path;
   try {
     const resolved = provider?.resolveSourceAsset?.(path);
     if (resolved) return resolved;

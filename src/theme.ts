@@ -127,21 +127,20 @@ export const HANEOKA_THEME_CSS = String.raw`
 
 /* Native ADV indicator animations ---------------------------------------- */
 /* TalkNextIndicator: 0.917s loop, anchoredPosition.y 76→68 at 41.7%. */
-@keyframes haneoka-next-bob { 0%, 21.8%, 100% { transform:translateY(0); } 41.7% { transform:translateY(-8px); } 70% { transform:translateY(0); } }
-[data-vega-theme="haneoka"] [data-node="TalkNextIndicator"] { animation:haneoka-next-bob .917s linear infinite; }
+@keyframes haneoka-next-bob { 0% { transform:translateY(0); } 21.8% { transform:translateY(0.74cqh); } 41.8%, 100% { transform:translateY(0); } }
+[data-vega-theme="haneoka"] .haneoka-scene > [data-node="TalkNextIndicator"] { animation:haneoka-next-bob .9167s ease-in-out infinite; }
 /* AutoNext: 2.0s loop; the glow layer spins a full turn with a soft pulse. */
-@keyframes haneoka-auto-spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
-[data-vega-theme="haneoka"] [data-node="AutoIcon"] [data-node="IconAutoGlow"] { animation:haneoka-auto-spin 2s linear infinite; }
+@keyframes haneoka-auto-spin { from { transform:rotate(360deg); } to { transform:rotate(0deg); } }
+[data-vega-theme="haneoka"] .haneoka-scene > [data-node="AutoIcon"] { animation:haneoka-auto-spin 2s ease-in-out infinite; }
 /* AdvTitle Play: 6s one-shot — alpha 0→1 by 1s, exit slide −300 + fade at 6s.
    AdvLocation Play: 2.5s one-shot — alpha 0→1 by 0.5s, fade 2.3→2.5, exit −300. */
-@keyframes haneoka-title-in { from { opacity:0; transform:translateY(24px); } 16.7% { transform:translateY(0); } to { opacity:1; transform:translateY(0); } }
-@keyframes haneoka-title-out { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(-24px); } }
-@keyframes haneoka-location-in { from { opacity:0; transform:translateY(24px); } 12% { transform:translateY(0); } 20% { opacity:1; } to { opacity:1; transform:translateY(0); } }
-@keyframes haneoka-location-out { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(-24px); } }
-[data-vega-theme="haneoka"] .haneoka-caption-enter-title { animation:haneoka-title-in 1s ease-out both; }
-[data-vega-theme="haneoka"] .haneoka-caption-exit-title { animation:haneoka-title-out .7s ease-in both; }
-[data-vega-theme="haneoka"] .haneoka-caption-enter-location { animation:haneoka-location-in .5s ease-out both; }
-[data-vega-theme="haneoka"] .haneoka-caption-exit-location { animation:haneoka-location-out .2s ease-in both; }
+/* AdvTitle Play: alpha=1 at t=0, hold 5s, fade 5→6s with slide x 0→-300 */
+@keyframes haneoka-title-out { 0% { opacity:1; transform:translateX(0); } 83.3% { opacity:1; transform:translateX(0); } 100% { opacity:0; transform:translateX(-27.78cqh); } }
+/* AdvLocation Play: alpha 0→1 @0.3s, x 300→0 @0.5s, hold, fade 2.0→2.3s, x 0→-300 2.0→2.5s */
+@keyframes haneoka-location-cycle { 0% { opacity:0; transform:translateX(27.78cqh); } 12% { opacity:1; } 20% { transform:translateX(0); } 80% { opacity:1; transform:translateX(0); } 92% { opacity:0; } 100% { opacity:0; transform:translateX(-27.78cqh); } }
+[data-vega-theme="haneoka"] .haneoka-caption-enter-title { opacity:1; }
+[data-vega-theme="haneoka"] .haneoka-caption-exit-title { animation:haneoka-title-out 1s ease-in both; }
+[data-vega-theme="haneoka"] .haneoka-caption-cycle-location { animation:haneoka-location-cycle 2.5s ease-in-out both; }
 [data-vega-theme="haneoka"] .haneoka-native-choice {position:relative;flex-shrink:0;width:100%;border:0;padding:0;background:transparent;color:inherit;pointer-events:auto;cursor:pointer}
 [data-vega-theme="haneoka"] .haneoka-native-choice:disabled {opacity:.45;cursor:default}
 [data-vega-theme="haneoka"] .haneoka-native-choice:focus-visible {outline:2px solid white;outline-offset:4px}

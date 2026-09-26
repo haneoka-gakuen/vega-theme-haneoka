@@ -108,14 +108,14 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
           until = 0,
           phase: "hidden" | "showing" | "leaving" = "hidden",
           timer = 0;
-        const enterClass = `haneoka-caption-enter-${kind}`,
-          exitClass = `haneoka-caption-exit-${kind}`,
-          exitMs = kind === "title" ? 700 : 200,
-          totalMs = kind === "title" ? 6000 : 2500;
+        const cycleClass = `haneoka-caption-cycle-${kind}`;
+        const exitClass = `haneoka-caption-exit-${kind}`;
+        const exitMs = kind === "title" ? 1000 : 500;
+        const totalMs = kind === "title" ? 6000 : 2500;
         const hideNow = () => {
           if (timer) document.defaultView?.clearTimeout(timer);
           timer = 0;
-          scene.root.classList.remove(enterClass, exitClass);
+          scene.root.classList.remove(cycleClass, exitClass);
           scene.root.hidden = true;
           phase = "hidden";
           key = "";
@@ -129,16 +129,15 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
               key = text;
               until = now + (durationMs > 0 ? durationMs : totalMs);
               phase = "showing";
-              scene.root.classList.remove(enterClass, exitClass);
+              scene.root.classList.remove(cycleClass, exitClass);
               scene.root.hidden = false;
               void scene.root.offsetWidth;
-              scene.root.classList.add(enterClass);
+              if (kind === "location") scene.root.classList.add(cycleClass);
               return;
             }
             if (now >= until && phase === "showing") {
               phase = "leaving";
-              scene.root.classList.remove(enterClass);
-              scene.root.classList.add(exitClass);
+              if (kind === "title") scene.root.classList.add(exitClass);
               timer =
                 document.defaultView?.setTimeout(() => {
                   timer = 0;
