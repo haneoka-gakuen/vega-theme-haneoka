@@ -102,7 +102,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   if (!controller) throw new Error("A shell controller is required");
   const adapter = context.services(HANEOKA_THEME_HOST);
   const sequence = context.services(HANEOKA_STORY_SEQUENCE);
-  if (adapter?.externalPlaybackControls) return { dispose() {} };
+  // The host renders the transport itself; the in-game menu stays.
+  const stopProgress = adapter?.externalPlaybackControls ? undefined : mountHaneokaProgress(host, context);
   const document = host.ownerDocument,
     root = document.createElement("nav");
   root.className = "haneoka-controls";
@@ -110,8 +111,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   host.append(root);
   const viewport = bindHaneokaViewport(host, context);
   const font = createHaneokaShellTypography(context),
-    events = new AbortController(),
-    stopProgress = mountHaneokaProgress(host, context);
+    events = new AbortController();
   const nativeFont = createHaneokaSdfBinding(document, context.resources, context.signal);
   const { button: menu, surface: pressLayer, label: menuLabel } = createHaneokaMenuEntry(document);
   let pressFrame = 0,
@@ -245,7 +245,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     const locale = haneokaUiLocale(snapshot.settings.uiLanguage, document),
       hidden = snapshot.screen !== "game" || context.state.loading || !context.state.ready;
     if (hidden) expanded = false;
-    const next = `${locale}|${hidden}|${expanded}|${context.state.autoPlay}|${context.state.fastForward}|${context.state.video.visible}|${snapshot.settings.subtitlesEnabled}|${Boolean(document.fullscreenElement)}|${sequence?.continuous}`;
+    const fullscreenActive = adapter ? adapter.snapshot().fullscreen : Boolean(document.fullscreenElement);
+    const next = `${locale}|${hidden}|${expanded}|${context.state.autoPlay}|${context.state.fastForward}|${context.state.video.visible}|${snapshot.settings.subtitlesEnabled}|${fullscreenActive}|${sequence?.continuous}`;
     if (next === signature) return;
     signature = next;
     root.hidden = hidden;
@@ -276,7 +277,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
                   ? snapshot.settings.subtitlesEnabled
                   : action === "continuous"
                     ? sequence?.continuous
-                    : Boolean(document.fullscreenElement),
+                    : fullscreenActive,
           ),
         );
     }
@@ -353,7 +354,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       events.abort();
       document.defaultView?.cancelAnimationFrame(frame);
       clearTimeout(toastTimer);
-      stopProgress();
+      stopProgress?.();
       if (typeof sequenceSubscription === "function") void sequenceSubscription();
       else if (sequenceSubscription && "dispose" in sequenceSubscription) void sequenceSubscription.dispose();
       else if (sequenceSubscription && "destroy" in sequenceSubscription) void sequenceSubscription.destroy();
