@@ -31,6 +31,8 @@ const LANGUAGE_FONT_CHAINS: Readonly<Record<string, readonly FontName[]>> = {
   ko: ["korean", "dialogue", "symbols", "chinese"],
 };
 
+const DEFAULT_FONT_CHAIN: readonly FontName[] = ["dialogue", "chat", "symbols", "chinese", "korean"];
+
 const normalizeLanguageTag = (value: string): string => {
   const tag = value.trim().toLowerCase();
   if (!tag) return "";
@@ -55,7 +57,7 @@ const elementLang = (element: HTMLElement): string => {
 };
 
 export const chainForLanguage = (lang: string, phone: boolean): readonly FontName[] => {
-  const chain = LANGUAGE_FONT_CHAINS[normalizeLanguageTag(lang)] ?? LANGUAGE_FONT_CHAINS["ja"]!;
+  const chain = LANGUAGE_FONT_CHAINS[normalizeLanguageTag(lang)] ?? DEFAULT_FONT_CHAIN;
   return phone ? ["chat", ...chain.filter((name) => name !== "chat")] : chain;
 };
 
