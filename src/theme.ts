@@ -769,14 +769,9 @@ export const HANEOKA_THEME_CSS = String.raw`
 }
 [data-vega-theme="haneoka"] .haneoka-progress .haneoka-icon { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.6; fill: none; }
 [data-vega-theme="haneoka"] .haneoka-progress input {
-  appearance: none; -webkit-appearance: none; flex: 1 1 0%; min-width: 120px; width: 100%; height: 28px; padding: 0; margin: 0; cursor: pointer; box-sizing: border-box;
+  appearance: none; flex: 1; min-width: 0; height: 28px; padding: 0; margin: 0; cursor: pointer;
   background: linear-gradient(to right, #e2d9ff var(--haneoka-progress), #ffffff50 var(--haneoka-progress)) center / 100% 3px no-repeat;
   touch-action: pan-y;
-}
-/* iOS Safari renders <input type=range> with intrinsic width unless forced */
-@supports (-webkit-touch-callout: none) {
-  [data-vega-theme="haneoka"] .haneoka-progress input { flex: 1 1 0%; width: auto; }
-  [data-vega-theme="haneoka"] .haneoka-progress input::-webkit-slider-thumb { transform: scale(1.2); }
 }
 [data-vega-theme="haneoka"] .haneoka-progress input::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; background: #9e8cff; box-shadow: 0 0 8px #17122880; }
 [data-vega-theme="haneoka"] .haneoka-progress input::-moz-range-thumb { width: 8px; height: 8px; border-radius: 50%; border: 2px solid #fff; background: #9e8cff; }
