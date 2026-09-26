@@ -124,6 +124,24 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-native-controls[hidden] {display:none!important}
 [data-vega-theme="haneoka"] .haneoka-controls-status {position:absolute;top:10%;left:10%;right:30%;color:white;font-size:2cqh}
 [data-vega-theme="haneoka"] .haneoka-scene-node { background-repeat:no-repeat; pointer-events:none; }
+
+/* Native ADV indicator animations ---------------------------------------- */
+/* TalkNextIndicator: 0.917s loop, anchoredPosition.y 76→68 at 41.7%. */
+@keyframes haneoka-next-bob { 0%, 21.8%, 100% { transform:translateY(0); } 41.7% { transform:translateY(-8px); } 70% { transform:translateY(0); } }
+[data-vega-theme="haneoka"] [data-node="TalkNextIndicator"] { animation:haneoka-next-bob .917s linear infinite; }
+/* AutoNext: 2.0s loop; the glow layer spins a full turn with a soft pulse. */
+@keyframes haneoka-auto-spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+[data-vega-theme="haneoka"] [data-node="AutoIcon"] [data-node="IconAutoGlow"] { animation:haneoka-auto-spin 2s linear infinite; }
+/* AdvTitle Play: 6s one-shot — alpha 0→1 by 1s, exit slide −300 + fade at 6s.
+   AdvLocation Play: 2.5s one-shot — alpha 0→1 by 0.5s, fade 2.3→2.5, exit −300. */
+@keyframes haneoka-title-in { from { opacity:0; transform:translateY(24px); } 16.7% { transform:translateY(0); } to { opacity:1; transform:translateY(0); } }
+@keyframes haneoka-title-out { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(-24px); } }
+@keyframes haneoka-location-in { from { opacity:0; transform:translateY(24px); } 12% { transform:translateY(0); } 20% { opacity:1; } to { opacity:1; transform:translateY(0); } }
+@keyframes haneoka-location-out { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(-24px); } }
+[data-vega-theme="haneoka"] .haneoka-caption-enter-title { animation:haneoka-title-in 1s ease-out both; }
+[data-vega-theme="haneoka"] .haneoka-caption-exit-title { animation:haneoka-title-out .7s ease-in both; }
+[data-vega-theme="haneoka"] .haneoka-caption-enter-location { animation:haneoka-location-in .5s ease-out both; }
+[data-vega-theme="haneoka"] .haneoka-caption-exit-location { animation:haneoka-location-out .2s ease-in both; }
 [data-vega-theme="haneoka"] .haneoka-native-choice {position:relative;flex-shrink:0;width:100%;border:0;padding:0;background:transparent;color:inherit;pointer-events:auto;cursor:pointer}
 [data-vega-theme="haneoka"] .haneoka-native-choice:disabled {opacity:.45;cursor:default}
 [data-vega-theme="haneoka"] .haneoka-native-choice:focus-visible {outline:2px solid white;outline-offset:4px}

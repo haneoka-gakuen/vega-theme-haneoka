@@ -100,11 +100,56 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
         subtitles = scenes.get("subtitles")!,
         choiceContainer = scenes.get("choices")!.get("Choices");
       choiceContainer.replaceChildren();
-      let titleKey = "",
-        titleUntil = 0,
-        locationKey = "",
-        locationUntil = 0,
-        seekRevision = -1;
+      // AdvTitle/AdvLocation Play are authored one-shots (6.0s / 2.5s) with
+      // slide-in and a −300 exit slide; reproduce the enter/exit phases.
+      const captionState = (scene: HaneokaScene, kind: "title" | "location") => {
+        let key = "",
+          until = 0,
+          phase: "hidden" | "showing" | "leaving" = "hidden",
+          timer = 0;
+        const enterClass = `haneoka-caption-enter-${kind}`,
+          exitClass = `haneoka-caption-exit-${kind}`,
+          exitMs = kind === "title" ? 700 : 200,
+          totalMs = kind === "title" ? 6000 : 2500;
+        const hideNow = () => {
+          if (timer) document.defaultView?.clearTimeout(timer);
+          timer = 0;
+          scene.root.classList.remove(enterClass, exitClass);
+          scene.root.hidden = true;
+          phase = "hidden";
+          key = "";
+        };
+        return {
+          hideNow,
+          update(text: string, visible: boolean, now: number, restored: boolean, durationMs = 0) {
+            if (!visible || !text) return hideNow();
+            if (text !== key || restored) {
+              if (timer) document.defaultView?.clearTimeout(timer);
+              key = text;
+              until = now + (durationMs > 0 ? durationMs : totalMs);
+              phase = "showing";
+              scene.root.classList.remove(enterClass, exitClass);
+              scene.root.hidden = false;
+              void scene.root.offsetWidth;
+              scene.root.classList.add(enterClass);
+              return;
+            }
+            if (now >= until && phase === "showing") {
+              phase = "leaving";
+              scene.root.classList.remove(enterClass);
+              scene.root.classList.add(exitClass);
+              timer =
+                document.defaultView?.setTimeout(() => {
+                  timer = 0;
+                  if (phase === "leaving") hideNow();
+                }, exitMs) ?? 0;
+            }
+          },
+        };
+      };
+      const titleCaption = captionState(title, "title"),
+        locationCaption = captionState(location, "location");
+      let seekRevision = -1;
       refresh = () => {
         if (disposed) return;
         const state = context.state;
@@ -156,18 +201,14 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
         }
         centerBackdrop.hidden = scenes.get("center")!.root.hidden;
         const now = document.defaultView?.performance.now() ?? Date.now();
-        if (!state.title.visible) titleKey = "";
-        if (!state.location.visible) locationKey = "";
-        if (state.title.visible && (state.title.text !== titleKey || restored)) {
-          titleKey = state.title.text;
-          titleUntil = now + (state.title.duration > 0 ? state.title.duration * 1000 : 6000);
-        }
-        if (state.location.visible && (state.location.text !== locationKey || restored)) {
-          locationKey = state.location.text;
-          locationUntil = now + 2500;
-        }
-        title.root.hidden = !state.title.visible || !state.title.text || now >= titleUntil;
-        location.root.hidden = !state.location.visible || !state.location.text || now >= locationUntil;
+        titleCaption.update(
+          state.title.text,
+          state.title.visible,
+          now,
+          restored,
+          state.title.duration > 0 ? state.title.duration * 1000 : 0,
+        );
+        locationCaption.update(state.location.text, state.location.visible, now, restored);
         subtitles.root.hidden = !state.subtitles.visible || !state.subtitles.text;
         for (const [scene, name, text, lang] of [
           [title, "TitleText", state.title.text, state.title.lang],

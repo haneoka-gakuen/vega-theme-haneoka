@@ -15,6 +15,66 @@ type FontName = keyof typeof HANEOKA_SDF_ASSETS;
 const BANKS = new WeakMap<object, HaneokaFontBank>();
 const decoder = new TextDecoder();
 const fallbackOrder: readonly FontName[] = ["symbols", "chinese", "korean"];
+
+/**
+ * Native LocalizeManager swaps the TMP font asset per language: ja/en keep
+ * ShinGoPr6N, zh-Hans uses FZLanTingHei, zh-Hant uses the full NotoSansJP
+ * "everything" font (the same asset the chat windows use), and ko uses
+ * Pretendard. Falling through the other families afterwards reproduces the
+ * embedded-runtime glyph fallback instead of the browser default font.
+ */
+const LANGUAGE_FONT_CHAINS: Readonly<Record<string, readonly FontName[]>> = {
+  ja: ["dialogue", "chat", "symbols", "chinese", "korean"],
+  en: ["dialogue", "chat", "symbols", "chinese", "korean"],
+  "zh-hans": ["chinese", "dialogue", "symbols", "korean"],
+  "zh-hant": ["chat", "dialogue", "chinese", "symbols", "korean"],
+  ko: ["korean", "dialogue", "symbols", "chinese"],
+};
+
+const normalizeLanguageTag = (value: string): string => {
+  const tag = value.trim().toLowerCase();
+  if (!tag) return "";
+  if (tag.startsWith("zh")) {
+    const hans = tag.includes("hans") || tag.includes("cn") || tag.includes("sg") || tag === "zh";
+    return hans ? "zh-hans" : "zh-hant";
+  }
+  const primary = tag.split("-")[0]!;
+  return primary;
+};
+
+/** The effective language of a text node: its own lang, else the nearest
+ * ancestor that declares one (the shell sets lang on talk/subtitle nodes). */
+const elementLang = (element: HTMLElement): string => {
+  let source: HTMLElement | null = element;
+  while (source) {
+    const value = (source.lang || "").trim();
+    if (value) return value;
+    source = source.parentElement;
+  }
+  return "";
+};
+
+export const chainForLanguage = (lang: string, phone: boolean): readonly FontName[] => {
+  const chain = LANGUAGE_FONT_CHAINS[normalizeLanguageTag(lang)] ?? LANGUAGE_FONT_CHAINS["ja"]!;
+  return phone ? ["chat", ...chain.filter((name) => name !== "chat")] : chain;
+};
+
+const primaryFontOfChain = (lang: string): FontName => chainForLanguage(lang, false)[0]!;
+
+/** NotoSansJP ships only its Default material natively; other per-language
+ * families keep their authored outline presets matched by name suffix. */
+const remapMaterialForLanguage = (
+  bank: { readonly materials: Record<string, SdfMaterial> },
+  materialName: string,
+  lang: string,
+): string => {
+  const primary = primaryFontOfChain(lang);
+  if (materialName.startsWith(`${primary}-`)) return materialName;
+  const suffix = materialName.split("-").slice(1).join("-");
+  if (!suffix) return materialName;
+  const candidate = `${primary}-${suffix}`;
+  return bank.materials[candidate] ? candidate : `${primary}-default`;
+};
 export class HaneokaFontBank {
   readonly fonts = new Map<FontName, SdfFont>();
   readonly atlases = new Map<string, SdfAtlasPixels>();
@@ -78,17 +138,17 @@ export class HaneokaFontBank {
     });
     await this.metadata;
   }
-  chain(phone: boolean): SdfFont[] {
-    return [phone ? "chat" : "dialogue", ...fallbackOrder].flatMap((name) => {
+  chain(lang: string, phone: boolean): SdfFont[] {
+    return chainForLanguage(lang, phone).flatMap((name) => {
       const font = this.fonts.get(name as FontName);
       return font ? [font] : [];
     });
   }
-  async prepareText(text: string, phone: boolean, signal?: AbortSignal): Promise<void> {
+  async prepareText(text: string, lang: string, phone: boolean, signal?: AbortSignal): Promise<void> {
     await this.prepareMetadata(signal);
     const required = new Map<string, { font: SdfFont; atlas: number }>();
     for (const char of text) {
-      for (const font of this.chain(phone)) {
+      for (const font of this.chain(lang, phone)) {
         const entry = font.characters[String(char.codePointAt(0))];
         if (!entry) continue;
         const glyph = font.glyphs[String(entry[0])];
@@ -150,10 +210,11 @@ export async function prepareHaneokaFonts(context: StoryResourcePreparationConte
   }
   await bank.prepareText(
     normal + "Loading Menu Play Pause Save Settings Auto Skip Log 0123456789",
+    "",
     false,
     context.signal,
   );
-  if (phone) await bank.prepareText(phone, true, context.signal);
+  if (phone) await bank.prepareText(phone, "", true, context.signal);
 }
 
 export interface HaneokaSdfBinding {
@@ -227,6 +288,7 @@ export function createHaneokaSdfBinding(
       control = !!element.closest(".haneoka-controls"),
       speaker = element.dataset.node === "SpeakerText" || element.classList.contains("vega-portable-speaker");
     const windowType = element.closest("[data-window]")?.getAttribute("data-window") ?? "default";
+    const lang = elementLang(element);
     const outlined =
       (speaker && windowType === "default") ||
       element.classList.contains("haneoka-location") ||
@@ -250,6 +312,7 @@ export function createHaneokaSdfBinding(
                     : windowType === "center"
                       ? "dialogue-center"
                       : "dialogue-default";
+    const resolvedMaterialName = phone ? materialName : remapMaterialForLanguage(bank, materialName, lang);
     const paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
     const nowrap = style.whiteSpace === "nowrap" || element.dataset.textAuto === "true";
     const messageRow = element.classList.contains("haneoka-phone__message-text")
@@ -273,11 +336,12 @@ export function createHaneokaSdfBinding(
       style.fontWeight,
       style.textAlign,
       ratio,
-      materialName,
+      resolvedMaterialName,
+      lang,
     ]);
     if (signature === entry.signature && entry.spacer.parentElement === element) return true;
     const options = {
-      fonts: bank.chain(phone),
+      fonts: bank.chain(lang, phone),
       fontSize,
       ruby: { scale: 0.5, verticalOffset: 1, alignment: "annotation" as const },
       maxWidth: nowrap || control ? Infinity : width,
@@ -331,7 +395,7 @@ export function createHaneokaSdfBinding(
     const absent = layout.quads.some((q) => !bank.atlases.has(`${q.font.id}:${q.glyph.atlas}`));
     if (absent) {
       void bank
-        .prepareText(entry.fullText, phone, signal)
+        .prepareText(entry.fullText, lang, phone, signal)
         .then(refresh)
         .catch(() => {});
       return false;
@@ -363,7 +427,7 @@ export function createHaneokaSdfBinding(
     );
     const rendered = painter.paint(
       shown,
-      bank.material(materialName),
+      bank.material(resolvedMaterialName),
       nowrap || control || messageRow ? layout.width : width,
       Math.max(1, layout.height),
       ratio,
@@ -416,7 +480,7 @@ export function createHaneokaSdfBinding(
       if (/<(?:u|s|strike|mark|sprite)[\s>]/iu.test(text)) return false;
       if (!bank.shader)
         void bank
-          .prepareText(fullText, !!element.closest(".haneoka-phone"), signal)
+          .prepareText(fullText, elementLang(element), !!element.closest(".haneoka-phone"), signal)
           .then(refresh)
           .catch(() => {});
       let entry = entries.get(element);
