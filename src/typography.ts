@@ -347,8 +347,8 @@ export function createHaneokaSdfBinding(
       fontSize,
       ruby: { scale: 0.5, verticalOffset: 1, alignment: "annotation" as const },
       maxWidth: nowrap || control ? Infinity : width,
-      characterSpacing: profile?.characterSpacing ?? (phone ? 0 : control ? -6 : 2),
-      lineSpacing: profile?.lineSpacing ?? (phone || control ? 0 : speaker ? 0 : -54),
+      characterSpacing: 0,
+      lineSpacing: 0,
       bold: Number(style.fontWeight) >= 600,
       color: parseColor(style.color),
       align: control

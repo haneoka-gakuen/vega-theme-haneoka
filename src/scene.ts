@@ -236,9 +236,8 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
       style.color = color(text.color);
       style.textAlign = text.horizontal === 2 ? "center" : text.horizontal === 4 ? "right" : "left";
       style.whiteSpace = "pre-wrap";
-      style.display = "flex";
-      style.flexDirection = "column";
-      style.justifyContent = text.vertical === 512 ? "center" : text.vertical === 1024 ? "flex-end" : "flex-start";
+      // Block display: pre-wrap multi-line text needs normal line-height between
+      // lines. Flex-column turns each newline into a zero-gap flex item (overlap).
       // Native TMP outline materials → CSS text-shadow replicas.
       // OutlineAdvCommon: dark outline on all sides (name plates, captions).
       // OutlineLightGray: subtle light-gray outline (center talk text).
