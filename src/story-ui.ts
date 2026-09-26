@@ -51,6 +51,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
     labels = HANEOKA_UI_TEXT[haneokaUiLocale(snapshot.settings.uiLanguage, document)];
     for (const name of ["default", "center", "psych"])
       scenes.get(name)?.root.setAttribute("aria-label", labels.advance);
+    refresh();
   });
   void loadHaneokaScenes(document)
     .then((data) => {
