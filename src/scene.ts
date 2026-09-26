@@ -239,12 +239,6 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
       style.display = "flex";
       style.flexDirection = "column";
       style.justifyContent = text.vertical === 512 ? "center" : text.vertical === 1024 ? "flex-end" : "flex-start";
-      // Web-font line height: native lineSpacing is a TMP percentage of the
-      // font size (e.g. -54 = -54% of em). Convert to CSS line-height ratio:
-      // 1 + lineSpacing/100, clamped so CJK lines never collapse.
-      const lsRatio = 1 + (text.lineSpacing ?? 0) / 100;
-      style.lineHeight = String(Math.max(0.9, lsRatio));
-      style.letterSpacing = `${(text.characterSpacing ?? 0) * 0.01}em`;
       // Native TMP outline materials → CSS text-shadow replicas.
       // OutlineAdvCommon: dark outline on all sides (name plates, captions).
       // OutlineLightGray: subtle light-gray outline (center talk text).

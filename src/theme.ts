@@ -116,7 +116,9 @@ export const HANEOKA_THEME_CSS = String.raw`
   --haneoka-shell-muted: CanvasText;
 }
 
-[data-vega-theme="haneoka"] .haneoka-story-ui { position:absolute; inset:0; pointer-events:none; color:white; font-family:var(--haneoka-font); }
+[data-vega-theme="haneoka"] .haneoka-story-ui { position:absolute; inset:0; pointer-events:none; color:white; font-family:var(--haneoka-font); z-index:10; }
+[data-vega-theme="haneoka"] .haneoka-story-ui .haneoka-scene[data-scene="UIAdvSubtitlesView"] { z-index:5; }
+[data-vega-theme="haneoka"] .haneoka-story-ui .haneoka-scene[data-scene="UIAdvSubtitlesView"] [data-node="SubtitlesText"] { text-align:center; text-wrap:balance; }
 /* Android fullscreen: use dynamic viewport units so the URL bar hide/show
    doesn't offset the canvas; iOS gets visual-viewport-based sizing since
    WebKit doesn't support the Fullscreen API on arbitrary elements. */
