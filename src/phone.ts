@@ -150,8 +150,14 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
     phone.frame.setAttribute("aria-label", labels.advancePhone);
     const notifications = phone.root.querySelector<HTMLElement>(".haneoka-phone__lock-label"),
       incoming = phone.root.querySelector<HTMLElement>(".haneoka-phone__incoming-label");
-    if (notifications) richText.render(notifications, labels.notifications, true);
-    if (incoming) richText.render(incoming, labels.incoming, true);
+    if (notifications) {
+      setLanguage(notifications, document.documentElement.lang);
+      richText.render(notifications, labels.notifications, true);
+    }
+    if (incoming) {
+      setLanguage(incoming, document.documentElement.lang);
+      richText.render(incoming, labels.incoming, true);
+    }
   });
   const stop = animate(host, context.signal, render),
     unsubscribe = context.player.subscribePresentationObserver?.(() => render(true));
@@ -399,18 +405,19 @@ const renderPhone = (
   immediate = false,
   assetKey = "",
 ): void => {
-  richText.render(phone.title, state.chat.title || "CHAT", immediate);
   setLanguage(phone.title, state.chat.titleLang);
+  richText.render(phone.title, state.chat.title || "CHAT", immediate);
+  setLanguage(phone.batteryText, "");
   richText.render(phone.batteryText, state.chat.batteryText || "100%", immediate);
   const battery = Number(state.chat.battery);
   phone.batteryFill.style.setProperty(
     "--haneoka-chat-battery-level",
     `${(Number.isFinite(battery) ? Math.max(0, Math.min(1, battery / 100)) : 1) * 100}%`,
   );
-  richText.render(phone.typing, state.chat.typing, immediate);
   setLanguage(phone.typing, state.chat.typingLang);
-  richText.render(phone.incomingName, state.chat.title || "CHAT", immediate);
+  richText.render(phone.typing, state.chat.typing, immediate);
   setLanguage(phone.incomingName, state.chat.titleLang);
+  richText.render(phone.incomingName, state.chat.title || "CHAT", immediate);
   if (!messagesChanged) return;
   const mode = phoneMode(state.chat.screenMode);
   if (mode === "incoming") return;
@@ -442,7 +449,7 @@ const renderPhoneMessages = (
   immediate = false,
   assetKey = "",
 ): void => {
-  const previous = messageRows.get(host) ?? new Map();
+  const previous = messageRows.get(host) ?? new Map<string, { element: HTMLElement; signature: string }>();
   const next = new Map<string, { element: HTMLElement; signature: string }>();
   const occurrences = new Map<string, number>();
   const lock = host.classList.contains("haneoka-phone__lock-messages");
@@ -453,6 +460,10 @@ const renderPhoneMessages = (
     const signature = `${assetKey}\u0002${chatMessagesKey([message])}`;
     const existing = previous.get(key);
     if (existing?.signature === signature) {
+      const existingName = existing.element.querySelector<HTMLElement>(".haneoka-phone__message-name");
+      const existingText = existing.element.querySelector<HTMLElement>(".haneoka-phone__message-text");
+      if (existingName) setLanguage(existingName, message.speakerLang);
+      if (existingText) setLanguage(existingText, message.textLang);
       next.set(key, existing);
       continue;
     }
@@ -478,14 +489,15 @@ const renderPhoneMessages = (
     if (message.speaker && !message.self) {
       name = node(document, "b", "haneoka-phone__message-name");
       applyPhoneTextProfile(name, "speaker");
-      richText.render(name, message.speaker, immediate);
       setLanguage(name, message.speakerLang);
+      richText.render(name, message.speaker, immediate);
       if (!lock || message.stamp) content.append(name);
     }
     const row = node(document, "div", "haneoka-phone__message-row");
     if (message.self && Number(message.readCount || 0) > 0) {
       const read = node(document, "span", "haneoka-phone__read");
       applyPhoneTextProfile(read, "read");
+      setLanguage(read, "");
       richText.render(read, "既読", immediate);
       row.append(read);
     }
@@ -502,8 +514,8 @@ const renderPhoneMessages = (
       const bubble = node(document, "div", "haneoka-phone__bubble");
       const text = node(document, "div", "haneoka-phone__message-text haneoka-rich-text");
       applyPhoneTextProfile(text, "message");
-      richText.render(text, message.text, immediate);
       setLanguage(text, message.textLang);
+      richText.render(text, message.text, immediate);
       if (lock && name) bubble.append(name);
       bubble.append(text);
       row.append(bubble);

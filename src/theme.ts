@@ -204,6 +204,16 @@ export const HANEOKA_THEME_CSS = String.raw`
   text-shadow:0 0 2px rgb(30 40 70 / 70%), 1px 1px 2px rgb(30 40 70 / 50%);
 }
 
+/* Dynamic Unity SDF tables can omit glyphs from a populated face. The
+   typography binding loads that face on demand and keeps this paragraph in
+   the original family while preserving its authored CSS metrics and outline. */
+[data-vega-theme="haneoka"] [data-haneoka-native-font-fallback] {
+  font-family:var(--haneoka-native-font-family) !important;
+}
+[data-vega-theme="haneoka"] .haneoka-story-ui [data-text-profile][data-haneoka-native-font-fallback] {
+  line-height:var(--haneoka-native-line-height) !important;
+}
+
 /* The host owns the main locale contracts. These fallbacks mirror its
    Fontsource families when the theme is mounted without that host CSS. */
 [data-vega-theme="haneoka"] :is(.haneoka-story-ui, .haneoka-controls, .vega-shell):lang(en),
@@ -839,6 +849,7 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-video-skip{position:absolute;right:4cqh;bottom:12cqh;border:1px solid #becdff70;border-radius:3px;background:#162139b3;padding:10px 18px}
 [data-vega-theme="haneoka"][data-vega-ui-hidden=true] .haneoka-controls,[data-vega-theme="haneoka"][data-vega-ui-hidden=true] .haneoka-progress{visibility:hidden}
 @container(max-width:540px){[data-vega-theme="haneoka"] .haneoka-quickbar>button{padding:2px 12px;font-size:12px}[data-vega-theme="haneoka"] .haneoka-quickbar{right:8px;top:12cqh;max-height:74cqh}}
+@media(pointer:coarse){[data-vega-theme="haneoka"] .haneoka-menu-entry{min-width:48px;min-height:48px}[data-vega-theme="haneoka"] .haneoka-quickbar{min-width:180px}[data-vega-theme="haneoka"] .haneoka-quickbar>button{min-height:48px}}
 @media(prefers-reduced-motion:reduce){[data-vega-theme="haneoka"] .haneoka-quickbar{transition:none}}
 [data-vega-theme="haneoka"] .haneoka-progress {
   position: absolute; z-index: 76; inset: auto 0 0; height: 48px; box-sizing: content-box;

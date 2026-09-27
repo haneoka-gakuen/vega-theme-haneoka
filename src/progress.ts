@@ -1,17 +1,15 @@
 import type { VegaUiSlotContext } from "@haneoka/vega/plugin";
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { createHaneokaIcon } from "./icons.js";
-import { haneokaUiLocale } from "./locale.js";
+import { haneokaUiLocale, HANEOKA_PROGRESS_TEXT as text } from "./locale.js";
 
-const text = {
-  en: ["Story progress", "Play", "Pause", "Replay"],
-  ja: ["シナリオ進行", "再生", "一時停止", "もう一度"],
-  "zh-CN": ["剧情进度", "播放", "暂停", "重新播放"],
-  "zh-TW": ["劇情進度", "播放", "暫停", "重新播放"],
-  ko: ["이야기 진행", "재생", "일시 정지", "다시 재생"],
-} as const;
+export interface HaneokaProgressControl {
+  readonly visible: boolean;
+  setVisible(visible: boolean): void;
+  dispose(): void;
+}
 
-export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotContext): () => void {
+export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotContext): HaneokaProgressControl {
   const shell = context.services(VEGA_SHELL_CONTROLLER)!;
   const player = context.player;
   const document = host.ownerDocument;
@@ -32,6 +30,7 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
   transport.append(play, slider, position, status);
   host.append(transport);
   let disposed = false;
+  let enabled = true;
   let dragging = false;
   let committing = false;
   let resumeAfterDrag = false;
@@ -47,12 +46,15 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
   });
 
   function reveal(): void {
+    if (!enabled || disposed) return;
     transport.dataset.visible = "true";
+    transport.inert = false;
     context.root.dataset.vegaTransportVisible = "true";
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
-      if (!dragging && !committing) {
+      if (!dragging && !committing && !transport.contains(document.activeElement)) {
         delete transport.dataset.visible;
+        transport.inert = true;
         delete context.root.dataset.vegaTransportVisible;
       }
     }, 2200);
@@ -141,12 +143,6 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
     },
     { signal: events.signal },
   );
-  context.root.addEventListener("pointermove", reveal, {
-    signal: events.signal,
-  });
-  context.root.addEventListener("pointerdown", reveal, {
-    signal: events.signal,
-  });
   transport.addEventListener("focusin", reveal, { signal: events.signal });
 
   function paint(): void {
@@ -185,17 +181,32 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
   reveal();
   update();
   const stopPresentation = player.subscribePresentationObserver?.(paint) ?? (() => {});
-  return () => {
-    disposed = true;
-    events.abort();
-    stopPresentation();
-    cancelAnimationFrame(frame);
-    clearTimeout(hideTimer);
-    if (typeof subscription === "function") void subscription();
-    else if ("dispose" in subscription) void subscription.dispose();
-    else if ("destroy" in subscription) void subscription.destroy();
-    else void subscription.close();
-    transport.remove();
-    delete context.root.dataset.vegaTransportVisible;
+  return {
+    get visible() {
+      return !transport.hidden && transport.dataset.visible === "true";
+    },
+    setVisible(visible: boolean) {
+      enabled = visible;
+      if (visible) reveal();
+      else {
+        clearTimeout(hideTimer);
+        delete transport.dataset.visible;
+        delete context.root.dataset.vegaTransportVisible;
+        transport.inert = true;
+      }
+    },
+    dispose() {
+      disposed = true;
+      events.abort();
+      stopPresentation();
+      cancelAnimationFrame(frame);
+      clearTimeout(hideTimer);
+      if (typeof subscription === "function") void subscription();
+      else if ("dispose" in subscription) void subscription.dispose();
+      else if ("destroy" in subscription) void subscription.destroy();
+      else void subscription.close();
+      transport.remove();
+      delete context.root.dataset.vegaTransportVisible;
+    },
   };
 }

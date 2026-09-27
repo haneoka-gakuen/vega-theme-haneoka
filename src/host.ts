@@ -44,6 +44,7 @@ export interface HaneokaThemeHostSnapshot {
   readonly progress: number;
   readonly progressEnabled: boolean;
   readonly progressLabel?: string;
+  readonly playbackControlsVisible?: boolean;
 }
 
 export interface HaneokaThemeAssetProvider {
@@ -90,6 +91,7 @@ export interface HaneokaThemeHost extends HaneokaThemeAssetProvider {
    * mount a second transport.
    */
   readonly externalPlaybackControls?: boolean;
+  setPlaybackControlsVisible?(visible: boolean): void;
   snapshot(): HaneokaThemeHostSnapshot;
   subscribe(listener: (snapshot: HaneokaThemeHostSnapshot) => void): VegaDisposable;
   toggleAutoAdvance(): void;

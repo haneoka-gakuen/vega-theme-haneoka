@@ -6,104 +6,18 @@ import type { VegaDisposable, VegaUiSlotContext } from "@haneoka/vega/plugin";
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { HANEOKA_STORY_SEQUENCE, HANEOKA_THEME_HOST } from "./host.js";
 import { createHaneokaShellTypography } from "./shellTypography.js";
-import { haneokaUiLocale } from "./locale.js";
+import { haneokaUiLocale, HANEOKA_QUICKBAR_TEXT as labels } from "./locale.js";
 import { mountHaneokaProgress } from "./progress.js";
 export const HANEOKA_CONTROLS_ID = "haneoka-controls";
 let nextQuickbarId = 0;
-const labels = {
-  en: [
-    "Menu",
-    "Auto",
-    "Skip",
-    "Log",
-    "Q.Save",
-    "Load",
-    "Hide",
-    "Skip video",
-    "Saved",
-    "Subtitles",
-    "Fullscreen",
-    "Continuous",
-    "Leave story",
-    "Fast",
-    "More",
-  ],
-  ja: [
-    "メニュー",
-    "オート",
-    "スキップ",
-    "ログ",
-    "Q.セーブ",
-    "ロード",
-    "非表示",
-    "動画スキップ",
-    "セーブしました",
-    "字幕",
-    "全画面",
-    "連続再生",
-    "中断",
-    "早送り",
-    "その他",
-  ],
-  "zh-CN": [
-    "菜单",
-    "自动",
-    "跳过",
-    "回看",
-    "快存",
-    "读档",
-    "隐藏",
-    "跳过视频",
-    "已快速保存",
-    "字幕",
-    "全屏",
-    "连续播放",
-    "退出剧情",
-    "快进",
-    "更多",
-  ],
-  "zh-TW": [
-    "選單",
-    "自動",
-    "跳過",
-    "回看",
-    "快存",
-    "讀檔",
-    "隱藏",
-    "跳過影片",
-    "已快速儲存",
-    "字幕",
-    "全螢幕",
-    "連續播放",
-    "離開劇情",
-    "快轉",
-    "更多",
-  ],
-  ko: [
-    "메뉴",
-    "자동",
-    "스킵",
-    "로그",
-    "빠른 저장",
-    "불러오기",
-    "숨기기",
-    "영상 건너뛰기",
-    "저장 완료",
-    "자막",
-    "전체 화면",
-    "연속 재생",
-    "스토리 나가기",
-    "빨리 감기",
-    "더 보기",
-  ],
-} as const;
+
 export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotContext): VegaDisposable {
   const controller = context.services(VEGA_SHELL_CONTROLLER);
   if (!controller) throw new Error("A shell controller is required");
   const adapter = context.services(HANEOKA_THEME_HOST);
   const sequence = context.services(HANEOKA_STORY_SEQUENCE);
   // The host renders the transport itself; the in-game menu stays.
-  const stopProgress = adapter?.externalPlaybackControls ? undefined : mountHaneokaProgress(host, context);
+  const progress = adapter?.externalPlaybackControls ? undefined : mountHaneokaProgress(host, context);
   const document = host.ownerDocument,
     root = document.createElement("nav");
   root.className = "haneoka-controls";
@@ -176,6 +90,21 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     { signal: events.signal },
   );
   const actions = [
+    ...(progress || adapter?.setPlaybackControlsVisible
+      ? ([
+          [
+            "progress",
+            15,
+            () => {
+              const visible = adapter?.externalPlaybackControls
+                ? (adapter.snapshot().playbackControlsVisible ?? false)
+                : (progress?.visible ?? false);
+              if (adapter?.externalPlaybackControls) adapter.setPlaybackControlsVisible?.(!visible);
+              else progress?.setVisible(!visible);
+            },
+          ],
+        ] as const)
+      : []),
     ["skip", 2, () => context.player.skip()],
     ["auto", 1, () => controller.toggleAuto()],
     ["fast", 13, () => controller.toggleFastForward()],
@@ -217,6 +146,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       "click",
       (event) => {
         event.stopPropagation();
+        if (event.detail === 0) menu.focus();
         expanded = false;
         render();
         invoke(execute);
@@ -245,12 +175,17 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     const locale = haneokaUiLocale(snapshot.settings.uiLanguage, document),
       hidden = snapshot.screen !== "game" || context.state.loading || !context.state.ready;
     if (hidden) expanded = false;
-    const fullscreenActive = adapter ? adapter.snapshot().fullscreen : Boolean(document.fullscreenElement);
-    const next = `${locale}|${hidden}|${expanded}|${context.state.autoPlay}|${context.state.fastForward}|${context.state.video.visible}|${snapshot.settings.subtitlesEnabled}|${fullscreenActive}|${sequence?.continuous}`;
+    const hostSnapshot = adapter?.snapshot();
+    const fullscreenActive = hostSnapshot?.fullscreen ?? Boolean(document.fullscreenElement);
+    const progressVisible = adapter?.externalPlaybackControls
+      ? (hostSnapshot?.playbackControlsVisible ?? false)
+      : (progress?.visible ?? false);
+    const next = `${locale}|${hidden}|${expanded}|${context.state.autoPlay}|${context.state.fastForward}|${context.state.video.visible}|${snapshot.settings.subtitlesEnabled}|${fullscreenActive}|${sequence?.continuous}|${progressVisible}`;
     if (next === signature) return;
     signature = next;
     root.hidden = hidden;
     quick.dataset.open = String(expanded && !hidden);
+    quick.inert = !expanded || hidden;
     menu.setAttribute("aria-expanded", String(expanded && !hidden));
     root.lang = locale;
     const words = labels[locale];
@@ -261,6 +196,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       button.setAttribute("aria-label", words[index]);
       if (
         action === "auto" ||
+        action === "progress" ||
         action === "fast" ||
         action === "subtitles" ||
         action === "fullscreen" ||
@@ -269,15 +205,17 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
         button.setAttribute(
           "aria-pressed",
           String(
-            action === "auto"
-              ? context.state.autoPlay
-              : action === "fast"
-                ? context.state.fastForward
-                : action === "subtitles"
-                  ? snapshot.settings.subtitlesEnabled
-                  : action === "continuous"
-                    ? sequence?.continuous
-                    : fullscreenActive,
+            action === "progress"
+              ? progressVisible
+              : action === "auto"
+                ? context.state.autoPlay
+                : action === "fast"
+                  ? context.state.fastForward
+                  : action === "subtitles"
+                    ? snapshot.settings.subtitlesEnabled
+                    : action === "continuous"
+                      ? sequence?.continuous
+                      : fullscreenActive,
           ),
         );
     }
@@ -354,7 +292,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       events.abort();
       document.defaultView?.cancelAnimationFrame(frame);
       clearTimeout(toastTimer);
-      stopProgress?.();
+      progress?.dispose();
       if (typeof sequenceSubscription === "function") void sequenceSubscription();
       else if (sequenceSubscription && "dispose" in sequenceSubscription) void sequenceSubscription.dispose();
       else if (sequenceSubscription && "destroy" in sequenceSubscription) void sequenceSubscription.destroy();
