@@ -207,7 +207,9 @@ export const HANEOKA_THEME_CSS = String.raw`
 /* Dynamic Unity SDF tables can omit glyphs from a populated face. The
    typography binding loads that face on demand and keeps this paragraph in
    the original family while preserving its authored CSS metrics and outline. */
-[data-vega-theme="haneoka"] [data-haneoka-native-font-fallback] {
+[data-vega-theme="haneoka"] [data-haneoka-native-font-fallback],
+[data-vega-theme="haneoka"] [data-haneoka-native-font-fallback] [data-haneoka-text-content],
+[data-vega-theme="haneoka"] [data-haneoka-native-font-fallback] [data-haneoka-text-content] :where(*) {
   font-family:var(--haneoka-native-font-family) !important;
 }
 [data-vega-theme="haneoka"] .haneoka-story-ui [data-text-profile][data-haneoka-native-font-fallback] {

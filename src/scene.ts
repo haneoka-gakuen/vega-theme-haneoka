@@ -176,6 +176,10 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
     style.top = `calc(${(1 - min[1] - (max[1] - min[1]) * pivot[1]) * 100}% - ${pixel(pos[1])})`;
     style.transform = `translate(${-pivot[0] * 100}%,${-(1 - pivot[1]) * 100}%) rotate(${-Number(definition.rotation || 0)}deg) scale(${definition.scale[0]},${definition.scale[1]})`;
     style.transformOrigin = `${pivot[0] * 100}% ${(1 - pivot[1]) * 100}%`;
+    if (element.dataset.animation === "auto-spin") {
+      style.translate = `${-pivot[0] * 100}% ${-(1 - pivot[1]) * 100}%`;
+      style.transform = `rotate(${-Number(definition.rotation || 0)}deg) scale(${definition.scale[0]},${definition.scale[1]})`;
+    }
     if (parentDefinition?.layout && !definition.ignoreLayout) {
       style.position = "relative";
       style.left = "auto";

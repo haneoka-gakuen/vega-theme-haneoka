@@ -197,8 +197,8 @@ export class HaneokaFontBank {
   }
 
   async preparePainter(signal?: AbortSignal): Promise<boolean> {
-    if (this.painterUnavailable) return false;
     await this.prepareCore(signal);
+    if (this.painterUnavailable) return false;
     return this.ensurePainter();
   }
 
@@ -387,7 +387,12 @@ export class HaneokaFontBank {
   }
 
   async prepareText(text: string, lang: string, phone: boolean, signal?: AbortSignal): Promise<SdfPrepareResult> {
-    if (!(await this.preparePainter(signal))) return { missing: [], cannotFit: false, unavailable: true };
+    let painterReady = false;
+    try {
+      painterReady = await this.preparePainter(signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+    }
     const unresolved = new Set(
       [...visibleSourceText(text)].filter((character) => !/[\r\n\u200b\u200c\u200d\ufeff]/u.test(character)),
     );
@@ -402,6 +407,10 @@ export class HaneokaFontBank {
         unresolved.delete(character);
         required.set(`${font.id}:${glyph.atlas}`, { font, atlas: glyph.atlas });
       }
+    }
+    if (!painterReady) {
+      for (const listener of this.listeners) listener();
+      return { missing: [...unresolved], cannotFit: false, unavailable: true };
     }
     const protectedKeys = new Set(required.keys());
     let cannotFit = false;
@@ -419,6 +428,7 @@ export class HaneokaFontBank {
   async prepareNativeFallback(lang: string, signal?: AbortSignal): Promise<string | undefined> {
     const name = nativeFontForLanguage(lang);
     if (!name || typeof FontFace === "undefined" || !this.document.fonts) return undefined;
+    if (signal?.aborted) return undefined;
     const existing = this.nativeFonts.get(name);
     if (existing) return HANEOKA_NATIVE_FONT_ASSETS[name].family;
     await this.request(
@@ -442,6 +452,7 @@ export class HaneokaFontBank {
       },
       signal,
     );
+    if (signal?.aborted) return undefined;
     return HANEOKA_NATIVE_FONT_ASSETS[name].family;
   }
 
@@ -536,6 +547,7 @@ interface BindingEntry {
   preparedSignature: string;
   requestRevision: number;
   unsupportedSignature: string;
+  nativeFallbackAttemptedSignature: string;
   nativeFallbackSignature: string;
   nativeFallbackFamily: string;
   retryAt: number;
@@ -613,7 +625,7 @@ export function createHaneokaSdfBinding(
     element.removeAttribute("data-haneoka-sdf");
     element.removeAttribute("data-haneoka-sdf-advance");
     element.style.position = entry.position;
-    if (entry.nativeFallbackSignature && entry.nativeFallbackSignature === entry.requestSignature) {
+    if (entry.nativeFallbackFamily && entry.nativeFallbackSignature === entry.requestSignature) {
       element.dataset.haneokaNativeFontFallback = "true";
       element.style.setProperty("--haneoka-native-font-family", JSON.stringify(entry.nativeFallbackFamily));
       const language = fontLanguage(element);
@@ -630,6 +642,12 @@ export function createHaneokaSdfBinding(
       element.style.removeProperty("--haneoka-native-line-height");
     }
     entry.signature = "";
+  };
+
+  const markSdfFailure = (entry: BindingEntry): void => {
+    if (!entry.requestSignature) return;
+    entry.preparedSignature = "";
+    entry.unsupportedSignature = entry.requestSignature;
   };
 
   const releasePainterLease = (): void => {
@@ -718,7 +736,7 @@ export function createHaneokaSdfBinding(
       profile?.characterSpacing,
       profile && element.closest(".haneoka-story-ui") ? nativeLineSpacing(lang) : profile?.lineSpacing,
     ]);
-    if (entry.nativeFallbackSignature && entry.nativeFallbackSignature === entry.requestSignature) return false;
+    if (entry.nativeFallbackFamily && entry.nativeFallbackSignature === entry.requestSignature) return false;
     if (signature === entry.signature && entry.spacer.parentElement === element) return true;
     if (signature === entry.capacitySignature) return false;
     const fonts = bank.chain(lang, phone);
@@ -799,7 +817,7 @@ export function createHaneokaSdfBinding(
         releasePainterLease();
         const lease = bank.acquirePainter();
         if (!lease) {
-          entry.unsupportedSignature = entry.requestSignature;
+          markSdfFailure(entry);
           return false;
         }
         painter = lease.painter;
@@ -825,12 +843,12 @@ export function createHaneokaSdfBinding(
         )
       ) {
         entry.capacitySignature = signature;
-        entry.unsupportedSignature = entry.requestSignature;
+        markSdfFailure(entry);
         return false;
       }
       if (!painter!.prepareAtlases(keys, pixels)) {
         entry.capacitySignature = signature;
-        entry.unsupportedSignature = entry.requestSignature;
+        markSdfFailure(entry);
         return false;
       }
       try {
@@ -899,8 +917,10 @@ export function createHaneokaSdfBinding(
               }
             } catch {
               showFallback(element, entry);
+              markSdfFailure(entry);
               painterRetryAt = Date.now() + 1000;
               releasePainterLease();
+              schedulePrepare(element, entry);
             }
           }
         });
@@ -921,41 +941,78 @@ export function createHaneokaSdfBinding(
       entry.requestSignature = requestSignature;
       entry.preparedSignature = "";
       entry.unsupportedSignature = "";
+      entry.nativeFallbackAttemptedSignature = "";
       entry.nativeFallbackSignature = "";
       entry.nativeFallbackFamily = "";
       entry.retryAt = 0;
     }
+    const nativeEligible = !!nativeFontForLanguage(language);
+    const unsupported = entry.unsupportedSignature === requestSignature;
     if (
-      entry.unsupportedSignature === requestSignature ||
+      (unsupported && (!nativeEligible || entry.nativeFallbackAttemptedSignature === requestSignature)) ||
       entry.retryAt > Date.now() ||
-      entry.preparedSignature === requestSignature ||
+      (entry.preparedSignature === requestSignature && !unsupported) ||
       entry.preparing
     )
       return;
     const revision = entry.requestRevision;
     const controller = new AbortController();
     entry.prepareController = controller;
+    const ensureNativeFallback = async (): Promise<void> => {
+      if (
+        entries.get(element) !== entry ||
+        revision !== entry.requestRevision ||
+        controller.signal.aborted ||
+        lifetime.signal.aborted
+      )
+        return;
+      if (!nativeEligible || entry.nativeFallbackAttemptedSignature === requestSignature) return;
+      entry.nativeFallbackAttemptedSignature = requestSignature;
+      try {
+        const family = await bank.prepareNativeFallback(language, controller.signal);
+        if (
+          entries.get(element) !== entry ||
+          revision !== entry.requestRevision ||
+          controller.signal.aborted ||
+          lifetime.signal.aborted
+        )
+          return;
+        entry.nativeFallbackFamily = family ?? "";
+        entry.nativeFallbackSignature = family ? requestSignature : "";
+      } catch {
+        // A native-face load is one attempt per full-text request. A failed
+        // attempt must not turn every animation frame into another request.
+      }
+    };
     let preparation: Promise<void>;
     preparation = bank
       .prepareText(entry.fullText, language, phone, controller.signal)
       .then(async ({ missing, cannotFit, unavailable }) => {
-        const nativeFamily =
-          missing.length && !unavailable ? await bank.prepareNativeFallback(language, controller.signal) : undefined;
+        if (
+          entries.get(element) !== entry ||
+          revision !== entry.requestRevision ||
+          controller.signal.aborted ||
+          lifetime.signal.aborted
+        )
+          return;
+        const failed =
+          entry.unsupportedSignature === requestSignature || missing.length > 0 || cannotFit || unavailable;
+        if (failed) await ensureNativeFallback();
         if (entries.get(element) !== entry || revision !== entry.requestRevision || controller.signal.aborted) return;
-        entry.nativeFallbackFamily = nativeFamily ?? "";
-        entry.nativeFallbackSignature = nativeFamily ? requestSignature : "";
-        entry.unsupportedSignature = missing.length || cannotFit || unavailable ? requestSignature : "";
-        entry.preparedSignature = missing.length || cannotFit || unavailable ? "" : requestSignature;
+        entry.unsupportedSignature = failed ? requestSignature : "";
+        entry.preparedSignature = failed ? "" : requestSignature;
         entry.retryAt = 0;
       })
-      .catch(() => {
+      .catch(async () => {
         if (
           entries.get(element) === entry &&
           revision === entry.requestRevision &&
           !controller.signal.aborted &&
           !lifetime.signal.aborted
-        )
-          entry.retryAt = Date.now() + 1000;
+        ) {
+          markSdfFailure(entry);
+          await ensureNativeFallback();
+        }
       })
       .finally(() => {
         if (entry.preparing === preparation) entry.preparing = undefined;
@@ -972,8 +1029,10 @@ export function createHaneokaSdfBinding(
             }
           } catch {
             showFallback(element, entry);
+            markSdfFailure(entry);
             painterRetryAt = Date.now() + 1000;
             releasePainterLease();
+            schedulePrepare(element, entry);
           }
         }
       });
@@ -989,8 +1048,10 @@ export function createHaneokaSdfBinding(
         }
       } catch {
         showFallback(element, entry);
+        markSdfFailure(entry);
         painterRetryAt = Date.now() + 1000;
         releasePainterLease();
+        schedulePrepare(element, entry);
       }
     }
   };
@@ -1004,6 +1065,7 @@ export function createHaneokaSdfBinding(
     entry.prepareController = undefined;
     entry.preparing = undefined;
     observer?.unobserve(element);
+    entry.nativeFallbackAttemptedSignature = "";
     entry.nativeFallbackSignature = "";
     entry.nativeFallbackFamily = "";
     showFallback(element, entry);
@@ -1033,6 +1095,7 @@ export function createHaneokaSdfBinding(
           preparedSignature: "",
           requestRevision: 0,
           unsupportedSignature: "",
+          nativeFallbackAttemptedSignature: "",
           nativeFallbackSignature: "",
           nativeFallbackFamily: "",
           retryAt: 0,
@@ -1058,6 +1121,7 @@ export function createHaneokaSdfBinding(
         entry.requestSignature = "";
         entry.preparedSignature = "";
         entry.unsupportedSignature = "";
+        entry.nativeFallbackAttemptedSignature = "";
         entry.nativeFallbackSignature = "";
         entry.nativeFallbackFamily = "";
         entry.retryAt = 0;
@@ -1083,8 +1147,10 @@ export function createHaneokaSdfBinding(
         return rendered;
       } catch {
         showFallback(element, entry);
+        markSdfFailure(entry);
         painterRetryAt = Date.now() + 1000;
         releasePainterLease();
+        schedulePrepare(element, entry);
         return false;
       }
     },
