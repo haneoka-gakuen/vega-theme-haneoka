@@ -1,5 +1,7 @@
 import { parseAdvRichText, type AdvRichTextNode } from "@haneoka/vega-plugin-richtext";
-import type { StoryResourceResolver } from "@haneoka/vega/renderer-kit";
+import { ADV_COMMAND, iterateAdvCommands, type StoryResourceResolver } from "@haneoka/vega/renderer-kit";
+import type { StoryResourcePreparationContext } from "@haneoka/vega/plugin";
+import { resolveStoryLocalizedText } from "@haneoka/vega/runtime";
 import {
   decodeSdfAtlas,
   SdfTextPainter,
@@ -16,6 +18,7 @@ import {
   HANEOKA_SDF_MATERIALS,
   HANEOKA_SDF_SHADER,
 } from "./fontAssets.js";
+import { haneokaTextLocale } from "./locale.js";
 
 type FontName = keyof typeof HANEOKA_SDF_ASSETS;
 type NativeFontName = keyof typeof HANEOKA_NATIVE_FONT_ASSETS;
@@ -522,6 +525,63 @@ export class HaneokaFontBank {
   }
 }
 
+/**
+ * Warm the exact SDF resources used by authored text while the episode is
+ * still in its blocking preload phase. The UI slot is mounted before that
+ * phase, so doing this on the theme resource preparer means its first
+ * typewriter frame can paint through the same SDF material as the settled
+ * paragraph instead of briefly exposing the DOM fallback.
+ */
+export async function prepareHaneokaFonts(context: StoryResourcePreparationContext): Promise<void> {
+  if (!context.document) return;
+  const bank = haneokaFontBank(context.document, context.resources);
+  const resolve = context.resolveLocalizedText ?? resolveStoryLocalizedText;
+  const defaultLanguage = haneokaTextLocale("", context.document);
+  const normal: Array<{ text: string; language: string }> = [];
+  const phone: Array<{ text: string; language: string }> = [];
+  const seen = new Set<string>();
+  const add = (value: unknown, isPhone: boolean): void => {
+    const resolved = resolve(value);
+    const text = String(resolved.text || "");
+    if (!text) return;
+    const language = resolved.lang || defaultLanguage;
+    const key = `${isPhone ? "phone" : "normal"}\u0000${language}\u0000${text}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    (isPhone ? phone : normal).push({ text, language });
+  };
+  const phoneCommands = new Set<number>([
+    ADV_COMMAND.ChatWindow,
+    ADV_COMMAND.ChatTalk,
+    ADV_COMMAND.ChatStamp,
+    ADV_COMMAND.ChatTyping,
+  ]);
+  for (const command of iterateAdvCommands(context.story.commands ?? [])) {
+    const isPhone = phoneCommands.has(Number(command.command));
+    add(command.text, isPhone);
+    for (const segment of command.textSegments ?? []) add(segment, isPhone);
+    if (Array.isArray(command.targetTextNames)) for (const name of command.targetTextNames) add(name, isPhone);
+    if (Array.isArray(command.targets))
+      for (const target of command.targets) {
+        if (target && typeof target === "object") add(target.name, isPhone);
+      }
+    for (const choice of command.choices ?? []) add(choice.text, isPhone);
+  }
+
+  // Shell labels are painted by the same binding and are not part of the
+  // episode command stream. Keep this small fixed set independent of any
+  // host/game font catalogue.
+  add("Loading Menu Play Pause Save Settings Auto Skip Log 0123456789", false);
+  for (const entry of normal) {
+    const result = await bank.prepareText(entry.text, entry.language, false, context.signal);
+    if (result.missing.length) await bank.prepareNativeFallback(entry.language, context.signal);
+  }
+  for (const entry of phone) {
+    const result = await bank.prepareText(entry.text, entry.language, true, context.signal);
+    if (result.missing.length) await bank.prepareNativeFallback(entry.language, context.signal);
+  }
+}
+
 export const haneokaFontBank = (document: Document, resources?: StoryResourceResolver): HaneokaFontBank => {
   const key = resources ?? document;
   let bank = BANKS.get(key);
@@ -798,9 +858,7 @@ export function createHaneokaSdfBinding(
     const shown = {
       ...layout,
       quads: layout.quads.filter((quad) => (quad.characterIndex ?? 0) < visibleLength),
-      ...(layout.marks
-        ? { marks: layout.marks.filter((mark) => (mark.characterIndex ?? 0) < visibleLength) }
-        : {}),
+      ...(layout.marks ? { marks: layout.marks.filter((mark) => (mark.characterIndex ?? 0) < visibleLength) } : {}),
     };
     const keys = atlasKeys(shown);
     if (keys.some((key) => !bank.hasAtlas(key))) {
