@@ -63,6 +63,16 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   toast.className = "haneoka-control-toast";
   toast.setAttribute("role", "status");
   toast.hidden = true;
+  // The timer can be frozen while a backgrounded tablet tab throttles tasks,
+  // so a tap always dismisses the toast as well.
+  toast.addEventListener(
+    "pointerdown",
+    () => {
+      toast.hidden = true;
+      clearTimeout(toastTimer);
+    },
+    { signal: events.signal },
+  );
   let disposed = false,
     frame = 0,
     signature = "",
@@ -76,10 +86,13 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       toast.hidden = true;
     }, 3000);
   };
+  // Control failures degrade to the console: raw error text (a rejected
+  // fullscreen shows "...the user denied permission") must never surface over
+  // a playing episode.
   const invoke = (action: () => unknown) =>
     void Promise.resolve()
       .then(action)
-      .catch((error) => message(error instanceof Error ? error.message : String(error)));
+      .catch((error) => console.warn("[haneoka-theme] control action failed", error));
   menu.addEventListener(
     "click",
     (event) => {

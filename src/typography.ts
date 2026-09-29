@@ -1,4 +1,4 @@
-import { parseAdvRichText, type AdvRichTextNode } from "@haneoka/vega/plugin";
+import { parseAdvRichText, type AdvRichTextNode } from "@haneoka/vega-plugin-richtext";
 import type { StoryResourceResolver } from "@haneoka/vega/renderer-kit";
 import {
   decodeSdfAtlas,
@@ -798,6 +798,9 @@ export function createHaneokaSdfBinding(
     const shown = {
       ...layout,
       quads: layout.quads.filter((quad) => (quad.characterIndex ?? 0) < visibleLength),
+      ...(layout.marks
+        ? { marks: layout.marks.filter((mark) => (mark.characterIndex ?? 0) < visibleLength) }
+        : {}),
     };
     const keys = atlasKeys(shown);
     if (keys.some((key) => !bank.hasAtlas(key))) {

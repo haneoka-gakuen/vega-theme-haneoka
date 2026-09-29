@@ -127,14 +127,16 @@ const haneokaThemeResources = (
     const root = chatAssets?.dataRootsByWindowAsset?.[windowAsset] ?? haneokaChatSkin(windowAsset)?.dataRoot;
     const isPhoneCommand = Boolean(
       commandCode === ADV_COMMAND.ChatWindow ||
-      commandCode === ADV_COMMAND.ChatTalk ||
-      commandCode === ADV_COMMAND.ChatStamp ||
-      commandCode === ADV_COMMAND.ChatTyping ||
-      command.targetChatID !== undefined ||
-      command.chatMemoryId ||
-      command.chatWindowAssetName ||
-      command.chatIconAssetName ||
-      master,
+        commandCode === ADV_COMMAND.ChatTalk ||
+        commandCode === ADV_COMMAND.ChatStamp ||
+        commandCode === ADV_COMMAND.ChatTyping ||
+        // Authored exports carry `targetChatID: 0` on every command; only a
+        // positive id selects a MasterAdvChat preset at playback time.
+        Number(command.targetChatID) > 0 ||
+        command.chatMemoryId ||
+        command.chatWindowAssetName ||
+        command.chatIconAssetName ||
+        master,
     );
     if (isPhoneCommand) {
       usesPhoneUi = true;

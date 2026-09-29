@@ -159,9 +159,53 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
       const titleCaption = captionState(title, "title"),
         locationCaption = captionState(location, "location");
       let seekRevision = -1;
+      let inputKey = "";
+      let captionsIdleUntil = 0;
       refresh = () => {
         if (disposed) return;
         const state = context.state;
+        // Polled every frame: skip the DOM pass entirely while nothing it reads
+        // has changed (captions animate on their own timers until their end).
+        const now = document.defaultView?.performance.now() ?? Date.now();
+        const talk = state.talk;
+        const key = [
+          state.loading,
+          state.preload.done,
+          state.preload.total,
+          state.error,
+          state.seeking,
+          context.player.seekRevision,
+          talk.window,
+          talk.enabled,
+          talk.visible,
+          talk.presentation,
+          talk.shakeX,
+          talk.shakeY,
+          talk.fontScale,
+          talk.textLang,
+          talk.displayedText,
+          talk.text,
+          talk.textFormat,
+          talk.textDisplayMode,
+          talk.speaker,
+          talk.speakerLang,
+          talk.textComplete,
+          state.autoPlay,
+          state.fastForward,
+          state.title.text,
+          state.title.visible,
+          state.title.duration,
+          state.location.text,
+          state.location.visible,
+          state.subtitles.visible,
+          state.subtitles.text,
+          state.subtitles.lang,
+          state.choices.visible,
+          state.choices.items.length,
+        ].join("\u0000");
+        if (key === inputKey && now >= captionsIdleUntil) return;
+        inputKey = key;
+        captionsIdleUntil = state.title.visible || state.location.visible ? now + 6500 : 0;
         loading.hidden = !state.loading;
         loadingLabel.textContent = labels.loading;
         progress.value = state.preload.total ? state.preload.done / state.preload.total : 0;
@@ -209,7 +253,6 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
           for (const indicator of scene.all("FastIcon")) indicator.hidden = !state.fastForward;
         }
         centerBackdrop.hidden = scenes.get("center")!.root.hidden;
-        const now = document.defaultView?.performance.now() ?? Date.now();
         titleCaption.update(
           state.title.text,
           state.title.visible,
