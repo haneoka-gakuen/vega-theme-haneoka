@@ -145,6 +145,24 @@ const flattenRichText = (nodes: readonly AdvRichTextNode[]): string =>
 
 const visibleSourceText = (source: string): string => flattenRichText(parseAdvRichText(source));
 
+/**
+ * The SDF layout indexes ruby by its base text; the annotation is painted with
+ * that base atom and is not a separate typewriter unit. Keep reveal filtering
+ * on the same parsed representation without laying out the prefix again.
+ */
+const flattenLayoutText = (nodes: readonly AdvRichTextNode[]): string =>
+  nodes
+    .map((node) => {
+      if (node.type === "text") return node.value;
+      if (node.type === "break") return "\n";
+      if (node.type === "space") return "";
+      if (node.type === "ruby") return node.base;
+      return flattenLayoutText(node.children);
+    })
+    .join("");
+
+const layoutSourceText = (source: string): string => flattenLayoutText(parseAdvRichText(source));
+
 export class HaneokaFontBank {
   readonly fonts = new Map<FontName, SdfFont>();
   readonly atlases = new Map<string, SdfAtlasPixels>();
@@ -602,6 +620,9 @@ export interface HaneokaSdfBinding {
 interface BindingEntry {
   source: string;
   fullText: string;
+  fullLayoutSignature: string;
+  fullLayout: SdfTextLayout | undefined;
+  fullLayoutFontSize: number | undefined;
   signature: string;
   requestSignature: string;
   preparedSignature: string;
@@ -780,12 +801,15 @@ export function createHaneokaSdfBinding(
         (ownMessage ? 60 + (messageRow.querySelector(".haneoka-phone__read") ? 64 : 0) : 65) * phoneScale
       : undefined;
     const width = Math.max(1, messageWidth ?? element.clientWidth - paddingX);
+    const autoSizeHeight = profile?.autoSize
+      ? element.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0)
+      : 0;
     const ratio = Math.min(3, Math.max(1, document.defaultView?.devicePixelRatio ?? 1));
     const signature = JSON.stringify([
       entry.source,
       entry.fullText,
       width,
-      profile?.autoSize ? element.clientHeight : 0,
+      autoSizeHeight,
       fontSize,
       style.color,
       style.fontWeight,
@@ -826,35 +850,62 @@ export function createHaneokaSdfBinding(
     };
     const layoutFor = (text: string, size = fontSize): SdfTextLayout =>
       layoutSdfText(text, { ...options, fontSize: size });
-    let layout = layoutFor(entry.fullText);
-    if (layout.missing.length) return false;
-    if (profile?.autoSize && !nowrap && element.clientHeight > 0) {
-      const scale = fontSize / profile.size;
-      let low = Math.max(0.1, (profile.minSize ?? profile.size) * scale);
-      let high = Math.max(low, (profile.maxSize ?? profile.size) * scale);
-      const maxHeight =
-        element.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);
-      const fits = (value: SdfTextLayout) => value.width <= width + 0.01 && value.height <= maxHeight + 0.01;
-      let best = layoutFor(entry.fullText, low);
-      for (let step = 0; step < 12 && high - low > 0.05 * scale; step++) {
-        const size = (low + high) / 2;
-        const candidate = layoutFor(entry.fullText, size);
-        if (fits(candidate)) {
-          low = size;
-          best = candidate;
-        } else high = size;
+    const layoutSignature = JSON.stringify([
+      entry.fullText,
+      width,
+      autoSizeHeight,
+      fontSize,
+      style.color,
+      style.fontWeight,
+      style.textAlign,
+      lang,
+      phone,
+      speaker,
+      windowType,
+      nowrap,
+      control,
+      Boolean(messageRow),
+      profile?.size,
+      profile?.minSize,
+      profile?.maxSize,
+      profile?.characterSpacing,
+      profile && element.closest(".haneoka-story-ui") ? nativeLineSpacing(lang) : profile?.lineSpacing,
+      fonts.map((font) => font.id),
+    ]);
+    let layout = entry.fullLayoutSignature === layoutSignature ? entry.fullLayout : undefined;
+    if (!layout) {
+      layout = layoutFor(entry.fullText);
+      if (profile?.autoSize && !nowrap && element.clientHeight > 0) {
+        const scale = fontSize / profile.size;
+        let low = Math.max(0.1, (profile.minSize ?? profile.size) * scale);
+        let high = Math.max(low, (profile.maxSize ?? profile.size) * scale);
+        const fits = (value: SdfTextLayout) => value.width <= width + 0.01 && value.height <= autoSizeHeight + 0.01;
+        let best = layoutFor(entry.fullText, low);
+        for (let step = 0; step < 12 && high - low > 0.05 * scale; step++) {
+          const size = (low + high) / 2;
+          const candidate = layoutFor(entry.fullText, size);
+          if (fits(candidate)) {
+            low = size;
+            best = candidate;
+          } else high = size;
+        }
+        const largest = layoutFor(entry.fullText, high);
+        if (fits(largest)) {
+          low = high;
+          best = largest;
+        }
+        fontSize = low;
+        options = { ...options, fontSize };
+        layout = best;
       }
-      const largest = layoutFor(entry.fullText, high);
-      if (fits(largest)) {
-        low = high;
-        best = largest;
-      }
-      fontSize = low;
-      options = { ...options, fontSize };
-      layout = best;
+      entry.fullLayoutSignature = layoutSignature;
+      entry.fullLayout = layout;
+      entry.fullLayoutFontSize = fontSize;
+    } else if (entry.fullLayoutFontSize !== undefined) {
+      fontSize = entry.fullLayoutFontSize;
     }
-    const visibleText = layoutSdfText(entry.source, options).text;
-    const visibleLength = [...visibleText].length;
+    if (layout.missing.length) return false;
+    const visibleLength = [...layoutSourceText(entry.source)].length;
     const shown = {
       ...layout,
       quads: layout.quads.filter((quad) => (quad.characterIndex ?? 0) < visibleLength),
@@ -888,7 +939,7 @@ export function createHaneokaSdfBinding(
       const padding = Math.max(
         4,
         fontSize * 0.35,
-        ...shown.quads.flatMap((quad) => [
+        ...layout.quads.flatMap((quad) => [
           -quad.x,
           -quad.y,
           quad.x + quad.width - Math.max(width, layout.width),
@@ -1151,6 +1202,9 @@ export function createHaneokaSdfBinding(
         entry = {
           source: text,
           fullText,
+          fullLayoutSignature: "",
+          fullLayout: undefined,
+          fullLayoutFontSize: undefined,
           signature: "",
           requestSignature: "",
           preparedSignature: "",
@@ -1178,6 +1232,9 @@ export function createHaneokaSdfBinding(
       } else if (entry.fullText !== fullText) {
         entry.source = text;
         entry.fullText = fullText;
+        entry.fullLayoutSignature = "";
+        entry.fullLayout = undefined;
+        entry.fullLayoutFontSize = undefined;
         entry.signature = "";
         entry.requestSignature = "";
         entry.preparedSignature = "";
