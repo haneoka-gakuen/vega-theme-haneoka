@@ -1,4 +1,5 @@
 import { HANEOKA_UI_SCENES, HANEOKA_UI_SPRITES } from "./uiAssets.js";
+import { HANEOKA_CAPTION_SCENES } from "./captionScenes.js";
 
 type Pair = readonly [number, number];
 interface SceneText {
@@ -45,6 +46,7 @@ interface SceneNode {
   };
   fit?: Pair;
   ignoreLayout?: boolean;
+  minWidth?: number;
 }
 export type HaneokaSceneData = Readonly<Record<string, readonly SceneNode[]>>;
 export interface HaneokaScene {
@@ -70,6 +72,7 @@ export async function loadHaneokaScenes(document: Document): Promise<HaneokaScen
         if (!response.ok) throw new Error(`UI resource failed: ${response.status}`);
         return response.json() as Promise<HaneokaSceneData>;
       })
+      .then((data) => ({ ...data, ...HANEOKA_CAPTION_SCENES }))
       .catch((error) => {
         cache.delete(document);
         throw error;
@@ -145,7 +148,8 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
   const root = document.createElement("div");
   root.className = "haneoka-scene";
   root.dataset.scene = name;
-  root.style.cssText = "position:absolute;inset:0;pointer-events:none";
+  // Native camera bounds clip oversized gradients without creating a scroll box.
+  root.style.cssText = "position:absolute;inset:0;overflow:clip;pointer-events:none";
   const elements = new Map<string, HTMLElement>();
   const definitions = new Map<string, SceneNode>();
   let disposed = false;
@@ -169,6 +173,7 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
     const style = element.style;
     style.position = "absolute";
     style.boxSizing = "border-box";
+    if (definition.minWidth !== undefined) style.minWidth = pixel(definition.minWidth);
     if (definition.opacity !== undefined) style.opacity = String(definition.opacity);
     style.width = max[0] === min[0] ? pixel(size[0]) : `calc(${(max[0] - min[0]) * 100}% + ${pixel(size[0])})`;
     style.height = max[1] === min[1] ? pixel(size[1]) : `calc(${(max[1] - min[1]) * 100}% + ${pixel(size[1])})`;
@@ -266,17 +271,6 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
       style.whiteSpace = "pre-wrap";
       // One block owns all inline runs so vertical alignment never separates
       // rich-text spans or explicit line breaks into individual flex items.
-      // Native TMP outline materials → CSS text-shadow replicas.
-      // OutlineAdvCommon: dark outline on all sides (name plates, captions).
-      // OutlineLightGray: subtle light-gray outline (center talk text).
-      // OutlineButtonText: medium outline for button-adjacent labels.
-      if (text.material?.includes("OutlineAdvCommon")) {
-        style.textShadow = "0 0 2px #1a1a2e, 0 0 4px #1a1a2e, 1px 1px 2px #1a1a2e, -1px -1px 2px #1a1a2e";
-      } else if (text.material?.includes("OutlineLightGray")) {
-        style.textShadow = "0 0 2px rgb(180 180 190 / 60%), 1px 1px 1px rgb(160 160 170 / 40%)";
-      } else if (text.material?.includes("OutlineButtonText")) {
-        style.textShadow = "0 0 2px rgb(30 40 70 / 70%), 1px 1px 2px rgb(30 40 70 / 50%)";
-      }
       const content = document.createElement("div");
       content.dataset.haneokaTextContent = "true";
       content.style.minWidth = "0";

@@ -186,27 +186,19 @@ export const HANEOKA_THEME_CSS = String.raw`
     haneoka-location-translate 2.5s linear both;
 }
 
-/* DOM text keeps the native material distinction even when rich-text emits
-   nested spans. Default dialogue has no stroke; only authored outline
-   materials receive the CSS approximation. */
-[data-vega-theme="haneoka"] [data-haneoka-material="default"],
-[data-vega-theme="haneoka"] [data-haneoka-material="default"] :where(*) { text-shadow:none; }
-[data-vega-theme="haneoka"] [data-haneoka-material="outline-adv"],
-[data-vega-theme="haneoka"] [data-haneoka-material="outline-adv"] :where(*) {
-  text-shadow:0 0 2px #1a1a2e, 0 0 4px #1a1a2e, 1px 1px 2px #1a1a2e, -1px -1px 2px #1a1a2e;
+/* One text-content layer owns the DOM material. SDF canvases already contain
+   the native outline/underlay; ancestors never add a second shadow. */
+[data-vega-theme="haneoka"] [data-haneoka-material] { text-shadow:none !important; }
+[data-vega-theme="haneoka"] [data-haneoka-material] > [data-haneoka-text-content] {
+  text-shadow:var(--haneoka-dom-material-shadow, none);
 }
-[data-vega-theme="haneoka"] [data-haneoka-material="outline-light"],
-[data-vega-theme="haneoka"] [data-haneoka-material="outline-light"] :where(*) {
-  text-shadow:0 0 2px rgb(180 180 190 / 60%), 1px 1px 1px rgb(160 160 170 / 40%);
-}
-[data-vega-theme="haneoka"] [data-haneoka-material="outline-button"],
-[data-vega-theme="haneoka"] [data-haneoka-material="outline-button"] :where(*) {
-  text-shadow:0 0 2px rgb(30 40 70 / 70%), 1px 1px 2px rgb(30 40 70 / 50%);
+[data-vega-theme="haneoka"] [data-haneoka-material] > [data-haneoka-text-content] :where(*) {
+  text-shadow:inherit;
 }
 
 /* Dynamic Unity SDF tables can omit glyphs from a populated face. The
-   typography binding loads that face on demand and keeps this paragraph in
-   the original family while preserving its authored CSS metrics and outline. */
+   typography binding loads that face on demand and uses it for missing glyphs.
+   If the painter is unavailable, the DOM stays in the original family while preserving its authored CSS metrics and outline. */
 [data-vega-theme="haneoka"] [data-haneoka-native-font-fallback],
 [data-vega-theme="haneoka"] [data-haneoka-native-font-fallback] [data-haneoka-text-content],
 [data-vega-theme="haneoka"] [data-haneoka-native-font-fallback] [data-haneoka-text-content] :where(*) {
@@ -834,23 +826,22 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-controls{position:absolute;inset:0;pointer-events:none;z-index:75;color:#fff;font-family:var(--haneoka-font);}
 [data-vega-theme="haneoka"] .haneoka-controls[hidden], [data-vega-theme="haneoka"] .haneoka-controls [hidden]{display:none!important}
 [data-vega-theme="haneoka"] .haneoka-controls button{font:400 clamp(12px,2.15cqh,20px)/1.2 var(--haneoka-font);color:inherit;cursor:pointer;pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:12px;box-sizing:border-box;}
-[data-vega-theme="haneoka"] .haneoka-menu-entry{position:absolute;top:0;right:.946875cqh;width:max(44px,24.754398cqh);height:max(44px,13.185185cqh);padding:0;border:0;margin:0;border-radius:999px;background:transparent;color:white;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-[data-vega-theme="haneoka"] .haneoka-menu-press{position:absolute;right:2.675926cqh;top:3.666667cqh;width:19.402546cqh;height:5.555556cqh;pointer-events:none;transform-origin:50% 50%;border-radius:999px}
+[data-vega-theme="haneoka"] .haneoka-menu-entry{position:absolute;top:0;right:7.777778cqh;width:max(44px,11.111111cqh);height:max(44px,11.111111cqh);padding:0;border:0;margin:0;border-radius:0;background:transparent;color:white;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+[data-vega-theme="haneoka"] .haneoka-menu-press{position:absolute;right:0;top:0;width:11.111111cqh;height:11.111111cqh;pointer-events:none;transform-origin:50% 50%;border-radius:0}
 [data-vega-theme="haneoka"] .haneoka-menu-face{display:block;position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-[data-vega-theme="haneoka"] .haneoka-menu-label{position:absolute;left:4.232541cqh;top:0;height:100%;display:flex;flex-direction:column;justify-content:center;white-space:nowrap;line-height:normal;font-size:2.375cqh;font-weight:700}
 [data-vega-theme="haneoka"] .haneoka-controls .haneoka-menu-entry:focus-visible{outline:none}
 [data-vega-theme="haneoka"] .haneoka-menu-entry:focus-visible .haneoka-menu-press{outline:2px solid #acdacf;outline-offset:3px}
 [data-vega-theme="haneoka"] .haneoka-control-label{white-space:nowrap;display:block}
-[data-vega-theme="haneoka"] .haneoka-quickbar{position:absolute;right:max(1.8cqh,10px);top:11.8cqh;display:flex;flex-direction:column;align-items:stretch;width:clamp(138px,20.4cqh,220px);max-height:min(74cqh,calc(100% - 25cqh));overflow-y:auto;scrollbar-width:thin;pointer-events:none;padding:4px;border:1px solid #bbccec50;border-radius:8px;background:#101a34ed;box-shadow:0 18px 40px #07112499;backdrop-filter:blur(12px);opacity:0;visibility:hidden;transform:translateY(-7px);transition:opacity .15s,transform .15s,visibility .15s;}
+[data-vega-theme="haneoka"] .haneoka-quickbar{position:absolute;right:max(1.8cqh,10px);top:calc(.740741cqh + max(44px,11.111111cqh) + 4px);display:flex;flex-direction:column;align-items:stretch;width:clamp(138px,20.4cqh,220px);max-height:max(44px,calc(100% - .740741cqh - max(44px,11.111111cqh) - 12px));overflow-y:auto;scrollbar-width:thin;pointer-events:none;padding:4px;border:1px solid #bbccec50;border-radius:8px;background:#101a34ed;box-shadow:0 18px 40px #07112499;backdrop-filter:blur(12px);opacity:0;visibility:hidden;transform:translateY(-7px);transition:opacity .15s,transform .15s,visibility .15s;}
 [data-vega-theme="haneoka"] .haneoka-quickbar[data-open="true"]{opacity:1;visibility:visible;transform:none;pointer-events:auto}
-[data-vega-theme="haneoka"] .haneoka-quickbar>button{position:relative;flex:none;min-height:clamp(22px,8.2cqh,88px);width:100%;border:0;border-radius:4px;background:transparent;padding:2px 16px;text-align:left;font-size:clamp(12px,1.85cqh,17px);color:#edf3ff;cursor:pointer}
+[data-vega-theme="haneoka"] .haneoka-quickbar>button{position:relative;flex:none;min-height:clamp(44px,8.2cqh,88px);width:100%;border:0;border-radius:4px;background:transparent;padding:2px 16px;text-align:left;font-size:clamp(12px,1.85cqh,17px);color:#edf3ff;cursor:pointer}
 [data-vega-theme="haneoka"] .haneoka-quickbar>button+button{border-top:1px solid #cadbff25}
 [data-vega-theme="haneoka"] .haneoka-quickbar>button:hover,[data-vega-theme="haneoka"] .haneoka-quickbar>button[aria-pressed="true"]{color:#b5eee3;background:#abd1db1f}
 [data-vega-theme="haneoka"] .haneoka-controls :focus-visible{outline:2px solid #acdacf;outline-offset:3px}
 [data-vega-theme="haneoka"] .haneoka-control-toast{position:absolute;bottom:15cqh;left:50%;transform:translateX(-50%);max-width:75%;background:#17253bea;border:1px solid #91b9d560;border-radius:3px;padding:10px 20px;color:#fff;font-size:clamp(12px,2cqh,18px)}
 [data-vega-theme="haneoka"] .haneoka-video-skip{position:absolute;right:4cqh;bottom:12cqh;border:1px solid #becdff70;border-radius:3px;background:#162139b3;padding:10px 18px}
 [data-vega-theme="haneoka"][data-vega-ui-hidden=true] .haneoka-controls,[data-vega-theme="haneoka"][data-vega-ui-hidden=true] .haneoka-progress{visibility:hidden}
-@container(max-width:540px){[data-vega-theme="haneoka"] .haneoka-quickbar>button{padding:2px 12px;font-size:12px}[data-vega-theme="haneoka"] .haneoka-quickbar{right:8px;top:12cqh;max-height:74cqh}}
+@container(max-width:540px){[data-vega-theme="haneoka"] .haneoka-quickbar>button{padding:2px 12px;font-size:12px}[data-vega-theme="haneoka"] .haneoka-quickbar{right:8px}}
 @media(pointer:coarse){[data-vega-theme="haneoka"] .haneoka-menu-entry{min-width:48px;min-height:48px}[data-vega-theme="haneoka"] .haneoka-quickbar{min-width:180px}[data-vega-theme="haneoka"] .haneoka-quickbar>button{min-height:48px}}
 @media(prefers-reduced-motion:reduce){[data-vega-theme="haneoka"] .haneoka-quickbar{transition:none}}
 [data-vega-theme="haneoka"] .haneoka-progress {

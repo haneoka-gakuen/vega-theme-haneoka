@@ -3,7 +3,7 @@ import { createAdvTextRenderValue, type VegaDisposable, type VegaUiSlotContext }
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { VEGA_RICH_TEXT_SERVICE } from "@haneoka/vega-plugin-richtext";
 import { createHaneokaRichTextPresenter } from "./rich-text.js";
-import { createHaneokaSdfBinding } from "./typography.js";
+import { createHaneokaSdfBinding, haneokaFontBank } from "./typography.js";
 import { createHaneokaScene, loadHaneokaScenes, type HaneokaScene } from "./scene.js";
 import { mountHaneokaPhone } from "./phone.js";
 import { HANEOKA_UI_TEXT, haneokaTextLocale, haneokaUiLocale } from "./locale.js";
@@ -13,6 +13,8 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
     root = document.createElement("section");
   root.className = "haneoka-story-ui";
   root.lang = haneokaTextLocale("", document);
+  const fontBank = haneokaFontBank(document, context.resources);
+  fontBank.uiLanguage = root.lang;
   root.setAttribute("aria-live", "polite");
   host.append(root);
   const viewport = bindHaneokaViewport(host, context);
@@ -43,7 +45,10 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
   const scenes = new Map<string, HaneokaScene>();
   const captionDisposers: Array<() => void> = [];
   let choiceScenes: HaneokaScene[] = [],
-    choiceKey = "";
+    choiceKey = "",
+    choiceLanguage = "",
+    choiceVisible = false;
+  let choiceItems = context.state.choices.items.map(({ key, text, enabled, lang }) => ({ key, text, enabled, lang }));
   const advance = (event: Event) => {
     event.stopPropagation();
     context.player.requestNext();
@@ -51,6 +56,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
   let refresh = () => {};
   const subscription = shell?.subscribe((snapshot) => {
     root.lang = haneokaTextLocale(snapshot.settings.uiLanguage, document);
+    fontBank.uiLanguage = root.lang;
     labels = HANEOKA_UI_TEXT[haneokaUiLocale(snapshot.settings.uiLanguage, document)];
     for (const name of ["default", "center", "psych"])
       scenes.get(name)?.root.setAttribute("aria-label", labels.advance);
@@ -168,7 +174,26 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
         // has changed (captions animate on their own timers until their end).
         const now = document.defaultView?.performance.now() ?? Date.now();
         const talk = state.talk;
+        // Locale refresh mutates items in place; compare the fields the buttons consume.
+        const choicesChanged =
+          !state.seeking &&
+          (root.lang !== choiceLanguage ||
+            state.choices.visible !== choiceVisible ||
+            state.choices.items.length !== choiceItems.length ||
+            state.choices.items.some((item, index) => {
+              const previous = choiceItems[index]!;
+              return (
+                item.key !== previous.key ||
+                item.text !== previous.text ||
+                item.enabled !== previous.enabled ||
+                item.lang !== previous.lang
+              );
+            }));
+        const signature = choicesChanged
+          ? JSON.stringify([root.lang, state.choices.visible, state.choices.items])
+          : choiceKey;
         const key = [
+          root.lang,
           state.loading,
           state.preload.done,
           state.preload.total,
@@ -200,8 +225,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
           state.subtitles.visible,
           state.subtitles.text,
           state.subtitles.lang,
-          state.choices.visible,
-          state.choices.items.length,
+          signature,
         ].join("\u0000");
         if (key === inputKey && now >= captionsIdleUntil) return;
         inputKey = key;
@@ -251,6 +275,13 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
             indicator.hidden = !state.talk.textComplete || state.autoPlay || state.fastForward;
           for (const indicator of scene.all("AutoIcon")) indicator.hidden = !state.autoPlay;
           for (const indicator of scene.all("FastIcon")) indicator.hidden = !state.fastForward;
+          for (const indicator of [...scene.all("AutoIcon"), ...scene.all("FastIcon")]) {
+            if (indicator.hidden) continue;
+            for (const label of indicator.querySelectorAll<HTMLElement>("[data-text-profile]")) {
+              const profile = JSON.parse(label.dataset.textProfile!) as { value: string };
+              richText.render(label, profile.value, restored);
+            }
+          }
         }
         centerBackdrop.hidden = scenes.get("center")!.root.hidden;
         titleCaption.update(
@@ -273,10 +304,12 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
             richText.render(element, text, restored);
           }
         }
-        const signature = JSON.stringify([state.choices.visible, state.choices.items]);
         scenes.get("choices")!.root.hidden = !state.choices.visible;
         if (signature !== choiceKey) {
           choiceKey = signature;
+          choiceLanguage = root.lang;
+          choiceVisible = state.choices.visible;
+          choiceItems = state.choices.items.map(({ key, text, enabled, lang }) => ({ key, text, enabled, lang }));
           for (const scene of choiceScenes) {
             richText.releaseWithin(scene.root);
             scene.dispose();

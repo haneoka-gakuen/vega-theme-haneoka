@@ -19,23 +19,27 @@ import {
   HANEOKA_SDF_SHADER,
 } from "./fontAssets.js";
 import { haneokaTextLocale } from "./locale.js";
+import { createDynamicGlyph } from "./dynamicGlyph.js";
+import { nativeFontHasGlyph } from "./nativeFontCoverage.js";
+import { compactGlyphAtlases } from "./compactGlyphs.js";
 
 type FontName = keyof typeof HANEOKA_SDF_ASSETS;
 type NativeFontName = keyof typeof HANEOKA_NATIVE_FONT_ASSETS;
 const BANKS = new WeakMap<object, HaneokaFontBank>();
 const decoder = new TextDecoder();
-const MAX_CPU_ATLAS_BYTES = 64 * 1024 * 1024;
+// All original locale pages plus a dynamic glyph can exceed 64 MiB in one sentence.
+const MAX_CPU_ATLAS_BYTES = 128 * 1024 * 1024;
 
 /** Locale font families and their missing-glyph fallbacks. */
 const LANGUAGE_FONT_CHAINS: Readonly<Record<string, readonly FontName[]>> = {
-  ja: ["dialogue", "bold", "chat", "symbols", "chinese", "korean"],
-  en: ["dialogue", "bold", "chat", "symbols", "chinese", "korean"],
+  ja: ["dialogue", "bold", "symbols", "chinese", "korean"],
+  en: ["dialogue", "bold", "symbols", "chinese", "korean"],
   "zh-hans": ["chinese", "dialogue", "bold", "symbols", "korean"],
-  "zh-hant": ["chinese", "dialogue", "bold", "chat", "symbols", "korean"],
+  "zh-hant": ["chinese", "dialogue", "bold", "symbols", "korean"],
   ko: ["korean", "dialogue", "bold", "symbols", "chinese"],
 };
 
-const DEFAULT_FONT_CHAIN: readonly FontName[] = ["dialogue", "bold", "chat", "symbols", "chinese", "korean"];
+const DEFAULT_FONT_CHAIN: readonly FontName[] = ["dialogue", "bold", "symbols", "chinese", "korean"];
 
 const nativeFontForLanguage = (lang: string): NativeFontName | undefined => {
   switch (normalizeLanguageTag(lang)) {
@@ -169,6 +173,7 @@ export class HaneokaFontBank {
   readonly listeners = new Set<() => void>();
   materials: Record<string, SdfMaterial> = {};
   shader = "";
+  uiLanguage = "";
   private readonly corePending = new Map<
     string,
     SharedRequest<{ shader: string; materials: Record<string, SdfMaterial> }>
@@ -176,6 +181,7 @@ export class HaneokaFontBank {
   private readonly fontPending = new Map<string, SharedRequest<SdfFont>>();
   private readonly nativeFontPending = new Map<string, SharedRequest<FontFace>>();
   private readonly nativeFonts = new Map<NativeFontName, FontFace>();
+  private readonly dynamicFonts = new Map<string, { name: FontName; font: SdfFont }>();
   private readonly atlasPending = new Map<string, SharedRequest<SdfAtlasPixels>>();
   private readonly atlasPins = new Map<string, number>();
   private readonly atlasClock = new Map<string, number>();
@@ -418,6 +424,8 @@ export class HaneokaFontBank {
       [...visibleSourceText(text)].filter((character) => !/[\r\n\u200b\u200c\u200d\ufeff]/u.test(character)),
     );
     const required = new Map<string, { font: SdfFont; atlas: number }>();
+    const protectedKeys = new Set<string>();
+    const allowDynamic = painterReady && unresolved.size <= 256;
     for (const name of chainForLanguage(lang, phone)) {
       if (!unresolved.size) break;
       const font = await this.prepareFont(name, signal);
@@ -427,13 +435,43 @@ export class HaneokaFontBank {
         if (!glyph) continue;
         unresolved.delete(character);
         required.set(`${font.id}:${glyph.atlas}`, { font, atlas: glyph.atlas });
+        protectedKeys.add(`${font.id}:${glyph.atlas}`);
+      }
+      // Dynamic glyphs occupy their own face's place in the fallback chain.
+      // A cmap check prevents Canvas from substituting an unrelated system face.
+      if (allowDynamic && unresolved.size && (name === "chinese" || name === "korean")) {
+        const candidates = [...unresolved].filter((character) => nativeFontHasGlyph(name, character));
+        if (!candidates.length) continue;
+        const family = await this.prepareNativeFallback(name === "korean" ? "ko" : "zh", signal);
+        if (!family) continue;
+        for (const character of candidates) {
+          if (signal?.aborted) throw abortError(signal);
+          const key = `${name}:${character.codePointAt(0)}`;
+          let dynamic = this.dynamicFonts.get(key)?.font;
+          if (!dynamic || !this.hasAtlas(`${dynamic.id}:0`)) {
+            const generated = createDynamicGlyph(
+              this.document,
+              character,
+              JSON.stringify(family),
+              font,
+              name === "korean" ? 600 : 400,
+            );
+            dynamic = generated.font;
+            if (!this.cacheAtlas(`${dynamic.id}:0`, generated.pixels, protectedKeys)) continue;
+          }
+          this.dynamicFonts.delete(key);
+          this.dynamicFonts.set(key, { name, font: dynamic });
+          if (this.dynamicFonts.size > 512) this.dynamicFonts.delete(this.dynamicFonts.keys().next().value!);
+          protectedKeys.add(`${dynamic.id}:0`);
+          required.set(`${dynamic.id}:0`, { font: dynamic, atlas: 0 });
+          unresolved.delete(character);
+        }
       }
     }
     if (!painterReady) {
       for (const listener of this.listeners) listener();
       return { missing: [...unresolved], cannotFit: false, unavailable: true };
     }
-    const protectedKeys = new Set(required.keys());
     let cannotFit = false;
     for (const { font, atlas } of required.values()) {
       if (!(await this.prepareAtlas(font, atlas, protectedKeys, signal))) {
@@ -482,7 +520,9 @@ export class HaneokaFontBank {
     if (!this.fonts.has(names[0]!)) return [];
     return names.flatMap((name) => {
       const font = this.fonts.get(name);
-      return font ? [font] : [];
+      return font
+        ? [font, ...[...this.dynamicFonts.values()].filter((entry) => entry.name === name).map((entry) => entry.font)]
+        : [];
     });
   }
 
@@ -527,6 +567,7 @@ export class HaneokaFontBank {
     for (const face of this.nativeFonts.values()) this.document.fonts.delete(face);
     this.nativeFonts.clear();
     this.nativeFontPending.clear();
+    this.dynamicFonts.clear();
     this.atlasPending.clear();
     this.fonts.clear();
     this.atlases.clear();
@@ -550,11 +591,14 @@ export class HaneokaFontBank {
  * typewriter frame can paint through the same SDF material as the settled
  * paragraph instead of briefly exposing the DOM fallback.
  */
-export async function prepareHaneokaFonts(context: StoryResourcePreparationContext): Promise<void> {
+export async function prepareHaneokaFonts(
+  context: StoryResourcePreparationContext,
+  uiLanguage?: string,
+): Promise<void> {
   if (!context.document) return;
   const bank = haneokaFontBank(context.document, context.resources);
   const resolve = context.resolveLocalizedText ?? resolveStoryLocalizedText;
-  const defaultLanguage = haneokaTextLocale("", context.document);
+  const defaultLanguage = haneokaTextLocale(uiLanguage ?? bank.uiLanguage, context.document);
   const normal: Array<{ text: string; language: string }> = [];
   const phone: Array<{ text: string; language: string }> = [];
   const seen = new Set<string>();
@@ -562,7 +606,9 @@ export async function prepareHaneokaFonts(context: StoryResourcePreparationConte
     const resolved = resolve(value);
     const text = String(resolved.text || "");
     if (!text) return;
-    const language = resolved.lang || defaultLanguage;
+    // TMP's localized font slot follows the active UI mode. Authored text
+    // language remains available for accessibility, but does not pick a face.
+    const language = defaultLanguage;
     const key = `${isPhone ? "phone" : "normal"}\u0000${language}\u0000${text}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -623,6 +669,7 @@ interface BindingEntry {
   fullLayoutSignature: string;
   fullLayout: SdfTextLayout | undefined;
   fullLayoutFontSize: number | undefined;
+  compacted: ReturnType<typeof compactGlyphAtlases> | undefined;
   signature: string;
   requestSignature: string;
   preparedSignature: string;
@@ -789,6 +836,35 @@ export function createHaneokaSdfBinding(
                         ? "dialogue-center"
                         : "dialogue-default";
     const resolvedMaterialName = remapMaterialForLanguage(bank, materialName, lang, phone);
+    const material = bank.material(resolvedMaterialName);
+    const primaryFont = bank.chain(lang, phone)[0];
+    if (primaryFont) {
+      const f = material.floats;
+      const scale = (fontSize * primaryFont.scale) / primaryFont.size;
+      const gradient = primaryFont.padding + 1;
+      const cssColor = (name: string): string => {
+        const c = material.colors[name] ?? [0, 0, 0, 0];
+        return `rgba(${c[0] * 255},${c[1] * 255},${c[2] * 255},${c[3]})`;
+      };
+      const shadows: string[] = [];
+      if (material.keywords?.includes("OUTLINE_ON")) {
+        const radius = (f._OutlineWidth ?? 0) * (f._ScaleRatioA ?? 1) * gradient * scale;
+        const blur = (f._OutlineSoftness ?? 0) * gradient * scale;
+        for (let i = 0; i < 8; i++) {
+          const angle = (i * Math.PI) / 4;
+          shadows.push(
+            `${Math.cos(angle) * radius}px ${Math.sin(angle) * radius}px ${blur}px ${cssColor("_OutlineColor")}`,
+          );
+        }
+      }
+      if (material.keywords?.includes("UNDERLAY_ON")) {
+        const underlayScale = gradient * scale * (f._ScaleRatioC ?? 1);
+        shadows.push(
+          `${(f._UnderlayOffsetX ?? 0) * underlayScale}px ${-(f._UnderlayOffsetY ?? 0) * underlayScale}px ${(f._UnderlaySoftness ?? 0) * underlayScale}px ${cssColor("_UnderlayColor")}`,
+        );
+      }
+      element.style.setProperty("--haneoka-dom-material-shadow", shadows.join(",") || "none");
+    }
     const paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
     const nowrap = style.whiteSpace === "nowrap" || element.dataset.textAuto === "true";
     const messageRow = element.classList.contains("haneoka-phone__message-text")
@@ -874,6 +950,7 @@ export function createHaneokaSdfBinding(
     ]);
     let layout = entry.fullLayoutSignature === layoutSignature ? entry.fullLayout : undefined;
     if (!layout) {
+      entry.compacted = undefined;
       layout = layoutFor(entry.fullText);
       if (profile?.autoSize && !nowrap && element.clientHeight > 0) {
         const scale = fontSize / profile.size;
@@ -905,20 +982,36 @@ export function createHaneokaSdfBinding(
       fontSize = entry.fullLayoutFontSize;
     }
     if (layout.missing.length) return false;
+    if (!entry.compacted) {
+      const fullKeys = atlasKeys(layout);
+      const fullPixels = new Map<string, SdfAtlasPixels>();
+      let bytes = 0;
+      for (const key of fullKeys) {
+        const pixels = bank.atlas(key);
+        if (!pixels) {
+          entry.preparedSignature = "";
+          return false;
+        }
+        fullPixels.set(key, pixels);
+        bytes += pixels.alpha.byteLength;
+      }
+      if (bytes > 64 * 1024 * 1024) entry.compacted = compactGlyphAtlases(layout, fullPixels);
+    }
+    const drawingLayout = entry.compacted?.layout ?? layout;
     const visibleLength = [...layoutSourceText(entry.source)].length;
     const shown = {
-      ...layout,
-      quads: layout.quads.filter((quad) => (quad.characterIndex ?? 0) < visibleLength),
+      ...drawingLayout,
+      quads: drawingLayout.quads.filter((quad) => (quad.characterIndex ?? 0) < visibleLength),
       ...(layout.marks ? { marks: layout.marks.filter((mark) => (mark.characterIndex ?? 0) < visibleLength) } : {}),
     };
     const keys = atlasKeys(shown);
-    if (keys.some((key) => !bank.hasAtlas(key))) {
+    if (keys.some((key) => !entry.compacted?.pixels.has(key) && !bank.hasAtlas(key))) {
       entry.preparedSignature = "";
       return false;
     }
     const pixels = new Map<string, SdfAtlasPixels>();
     for (const key of keys) {
-      const value = bank.atlas(key);
+      const value = entry.compacted?.pixels.get(key) ?? bank.atlas(key);
       if (!value) return false;
       pixels.set(key, value);
     }
@@ -972,7 +1065,7 @@ export function createHaneokaSdfBinding(
         }
         const rendered = painter!.paint(
           shown,
-          bank.material(resolvedMaterialName),
+          material,
           nowrap || control || messageRow ? layout.width : width,
           Math.max(1, layout.height),
           ratio,
@@ -1184,6 +1277,7 @@ export function createHaneokaSdfBinding(
     delete element.dataset.haneokaNativeFontFallback;
     element.style.removeProperty("--haneoka-native-font-family");
     element.style.removeProperty("--haneoka-native-line-height");
+    element.style.removeProperty("--haneoka-dom-material-shadow");
     entry.canvas.width = 1;
     entry.canvas.height = 1;
     entries.delete(element);
@@ -1205,6 +1299,7 @@ export function createHaneokaSdfBinding(
           fullLayoutSignature: "",
           fullLayout: undefined,
           fullLayoutFontSize: undefined,
+          compacted: undefined,
           signature: "",
           requestSignature: "",
           preparedSignature: "",
@@ -1219,7 +1314,7 @@ export function createHaneokaSdfBinding(
           capacitySignature: "",
           canvas: document.createElement("canvas"),
           accessible: contentElement(element),
-          accessibleStyle: "",
+          accessibleStyle: contentElement(element).style.cssText,
           spacer: document.createElement("span"),
           position: element.style.position,
           display: "",
@@ -1235,6 +1330,7 @@ export function createHaneokaSdfBinding(
         entry.fullLayoutSignature = "";
         entry.fullLayout = undefined;
         entry.fullLayoutFontSize = undefined;
+        entry.compacted = undefined;
         entry.signature = "";
         entry.requestSignature = "";
         entry.preparedSignature = "";
@@ -1254,7 +1350,6 @@ export function createHaneokaSdfBinding(
         entry.signature = "";
         entry.accessible = contentElement(element);
       }
-      if (!entry.accessibleStyle) entry.accessibleStyle = entry.accessible.style.cssText;
       schedulePrepare(element, entry);
       try {
         const rendered = draw(element, entry);
