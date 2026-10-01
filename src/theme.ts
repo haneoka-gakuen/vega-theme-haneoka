@@ -254,7 +254,11 @@ export const HANEOKA_THEME_CSS = String.raw`
   overflow: clip;
   color: #051233;
   text-shadow: none;
-  pointer-events: none;
+  pointer-events: auto;
+}
+
+[data-vega-theme="haneoka"] .haneoka-phone[hidden] {
+  display: none;
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone[data-phase="enter"],

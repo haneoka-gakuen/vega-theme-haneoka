@@ -122,9 +122,17 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
   typingObserver?.observe(phone.frame);
   const advance = (event: Event) => {
     event.stopPropagation();
-    context.player.requestNext();
+    const state = context.state;
+    if (state.chat.visible && !state.seeking && !state.loading && !state.error && !state.choices.visible)
+      context.player.requestNext();
   };
   phone.frame.addEventListener("click", advance, { signal: events.signal });
+  // The phone overlay owns only its otherwise empty stage area. Frame taps
+  // already stop propagation; scroll gestures and higher-layer controls keep
+  // their existing owners, so a click advances at most once.
+  phone.root.addEventListener("click", (event) => {
+    if (event.target === phone.root) advance(event);
+  }, { signal: events.signal });
   phone.frame.addEventListener(
     "keydown",
     (event) => {
@@ -138,6 +146,7 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
   const render = (immediate = false) => {
     if (disposed) return;
     const state = context.state;
+    phone.root.style.pointerEvents = state.choices.visible ? "none" : "";
     if (state.seeking) return;
     if (!state.chat.visible && !lifecycle.sourceVisible && !lifecycle.window) return;
     const assets = assetProvider?.assets?.(),
