@@ -104,6 +104,7 @@ export function bindPhoneScroll(viewport: HTMLElement, content: HTMLElement, sig
             }) ?? 0;
         });
   observer?.observe(content);
+  observer?.observe(viewport);
   return {
     beforeUpdate() {
       if (!following) remember();

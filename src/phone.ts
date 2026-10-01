@@ -103,6 +103,23 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
   const events = new AbortController();
   const chatScroll = bindPhoneScroll(phone.messages, phone.messageContent, events.signal);
   const lockScroll = bindPhoneScroll(phone.lockMessages, phone.lockContent, events.signal);
+  // TypingIndicatorBottom is a preferred-height layout, including 10 units
+  // above and below the 63-unit minimum text box. Reserve that same height
+  // inside the timeline so its last message stays above the input.
+  const updateTypingHeight = () => {
+    const view = document.defaultView;
+    const scale = (parseFloat(view?.getComputedStyle(phone.frame).height ?? "") || phone.frame.clientHeight) / 700;
+    if (scale <= 0) return;
+    const box = phone.typing.parentElement;
+    if (!box) return;
+    const height = parseFloat(view?.getComputedStyle(box).height ?? "") || box.offsetHeight;
+    phone.root.style.setProperty("--haneoka-chat-typing-height", `${Math.max(63 * scale, height) + 20 * scale}px`);
+  };
+  const typingObserver = document.defaultView?.ResizeObserver
+    ? new document.defaultView.ResizeObserver(updateTypingHeight)
+    : undefined;
+  typingObserver?.observe(phone.typing.parentElement!);
+  typingObserver?.observe(phone.frame);
   const advance = (event: Event) => {
     event.stopPropagation();
     context.player.requestNext();
@@ -142,6 +159,7 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
         immediate,
         assetKey,
       );
+      updateTypingHeight();
       lastMessages = messages;
       const window = `${state.chat.windowAssetName}\u0000${state.chat.dataRoot}`;
       const reset =
@@ -191,6 +209,7 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
       events.abort();
       chatScroll.dispose();
       lockScroll.dispose();
+      typingObserver?.disconnect();
       richText.dispose();
       releaseAssets();
       phone.root.remove();
@@ -708,6 +727,7 @@ const chatKey = (state: AdvPlayerState): string =>
         state.chat.typing,
         state.chat.typingLang,
         state.chat.batteryText,
+        state.chat.battery,
         state.chat.screenMode,
         state.chat.group,
       ].join("\u0001")

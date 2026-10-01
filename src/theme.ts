@@ -264,7 +264,8 @@ export const HANEOKA_THEME_CSS = String.raw`
 
 [data-vega-theme="haneoka"] .haneoka-phone__frame {
   position: relative;
-  width: min(66.666667cqh, var(--haneoka-chat-incoming-root-width-width, 93.75cqw));
+  /* AdvChatView.AdjustWindowSize: view height / the 700-unit root. */
+  width: 102.857143cqh;
   aspect-ratio: 36 / 35;
   overflow: visible;
   container-type: size;
@@ -517,6 +518,10 @@ export const HANEOKA_THEME_CSS = String.raw`
   padding: 4.285714cqh;
 }
 
+[data-vega-theme="haneoka"] .haneoka-phone__messages > .haneoka-phone__messages-content {
+  padding-bottom: calc(4.285714cqh + var(--haneoka-chat-typing-height, 11.857143cqh));
+}
+
 [data-vega-theme="haneoka"] .haneoka-phone__messages {
   top: 22.857143cqh;
   height: 71.428571cqh;
@@ -655,13 +660,21 @@ export const HANEOKA_THEME_CSS = String.raw`
 
 [data-vega-theme="haneoka"] .haneoka-phone__composer {
   position: absolute;
-  top: 82.857143cqh;
+  top: calc(97.142857cqh - var(--haneoka-chat-typing-height, 11.857143cqh));
   right: 0;
   left: 0;
   z-index: 7;
   display: block;
-  height: 14.285714cqh;
+  height: var(--haneoka-chat-typing-height, 11.857143cqh);
+}
+
+[data-vega-theme="haneoka"] .haneoka-phone__composer::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: calc(100% + 14.285714cqh);
   background: #fff;
+  content: "";
+  pointer-events: none;
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone__composer-action {
@@ -687,6 +700,7 @@ export const HANEOKA_THEME_CSS = String.raw`
 
 [data-vega-theme="haneoka"] .haneoka-phone__composer-action[data-icon="picture"] {
   left: calc(50% - 24.257143cqh);
+  bottom: 3.085714cqh;
   background-image: var(--haneoka-chat-composer-picture-image);
 }
 
@@ -710,9 +724,9 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-phone__typing-shell {
   position: absolute;
   top: 1.428571cqh;
-  left: 34.285714cqh;
+  left: 35cqh;
   display: block;
-  width: 70.414286cqh;
+  width: 52.142857cqh;
   min-height: 9cqh;
   box-sizing: border-box;
   padding: 0 8.571429cqh 0 4.285714cqh;
@@ -725,11 +739,11 @@ export const HANEOKA_THEME_CSS = String.raw`
   min-width: 0;
   min-height: 9cqh;
   align-items: center;
-  overflow: hidden;
+  overflow: visible;
   color: #051233;
   font-size: 3.428571cqh;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone__lock,
