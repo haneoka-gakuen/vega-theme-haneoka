@@ -1,7 +1,7 @@
 import { bindHaneokaViewport } from "./viewport.js";
 import { resolveEase } from "@haneoka/vega/renderer-kit";
-import { createHaneokaSdfBinding } from "./typography.js";
 import { createHaneokaMenuEntry } from "./menuEntry.js";
+import { HANEOKA_CONTROL_ASSETS } from "./controlAssets.js";
 import type { VegaDisposable, VegaUiSlotContext } from "@haneoka/vega/plugin";
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { HANEOKA_STORY_SEQUENCE, HANEOKA_THEME_HOST } from "./host.js";
@@ -26,8 +26,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   const viewport = bindHaneokaViewport(host, context);
   const font = createHaneokaShellTypography(context),
     events = new AbortController();
-  const nativeFont = createHaneokaSdfBinding(document, context.resources, context.signal);
-  const { button: menu, surface: pressLayer, label: menuLabel } = createHaneokaMenuEntry(document);
+  const { button: menu, surface: pressLayer, setExpanded: paintMenuState } = createHaneokaMenuEntry(document);
   let pressFrame = 0,
     pressValue = 1,
     pressed = false;
@@ -43,7 +42,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       from = pressValue,
       to = down ? Math.fround(0.9) : 1,
       duration = down ? 150 : 100;
-    const ease = resolveEase(down ? 30 : 9);
+    const ease = resolveEase(down ? 26 : 9);
     const step = (now: number) => {
       const progress = Math.min(1, (now - start) / duration);
       pressValue = from + (to - from) * ease(progress);
@@ -55,9 +54,15 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   root.append(menu);
   const quick = document.createElement("div");
   quick.className = "haneoka-quickbar";
+  // The native face can scale below the menu's minimum touch target.
+  // Keep the first row below that full target at small story viewports.
+  const quickTop = "calc(.740741cqh + max(44px, 11.111111cqh) + 4px)";
+  quick.style.top = quickTop;
+  quick.style.maxHeight = `calc(100% - ${quickTop} - 8px)`;
+  quick.style.width = "clamp(180px, 28cqh, 240px)";
+  quick.style.maxWidth = "calc(100% - 16px)";
   quick.id = `haneoka-quickbar-${++nextQuickbarId}`;
   menu.setAttribute("aria-controls", quick.id);
-  menu.setAttribute("aria-haspopup", "menu");
   let expanded = false;
   const toast = document.createElement("output");
   toast.className = "haneoka-control-toast";
@@ -89,10 +94,14 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   // Control failures degrade to the console: raw error text (a rejected
   // fullscreen shows "...the user denied permission") must never surface over
   // a playing episode.
-  const invoke = (action: () => unknown) =>
-    void Promise.resolve()
-      .then(action)
-      .catch((error) => console.warn("[haneoka-theme] control action failed", error));
+  const invoke = (action: () => unknown) => {
+    try {
+      // Fullscreen needs the trusted click's user activation.
+      void Promise.resolve(action()).catch((error) => console.warn("[haneoka-theme] control action failed", error));
+    } catch (error) {
+      console.warn("[haneoka-theme] control action failed", error);
+    }
+  };
   menu.addEventListener(
     "click",
     (event) => {
@@ -128,7 +137,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
         ] as const)
       : []),
     ["log", 3, () => controller.open("backlog")],
-    ["fullscreen", 10, () => adapter?.toggleFullscreen() ?? context.root.requestFullscreen?.()],
+    ["fullscreen", 10, () => (adapter ? adapter.toggleFullscreen() : context.root.requestFullscreen?.())],
     ["subtitles", 9, () => controller.setSetting("subtitlesEnabled", !controller.snapshot().settings.subtitlesEnabled)],
     [
       "save",
@@ -152,8 +161,23 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.action = action;
+    button.style.minHeight = "44px";
+    button.style.display = "flex";
+    button.style.alignItems = "center";
+    button.style.gap = "8px";
     const label = document.createElement("span");
     label.className = "haneoka-control-label";
+    const source = HANEOKA_CONTROL_ASSETS[action as keyof typeof HANEOKA_CONTROL_ASSETS];
+    if (source) {
+      const icon = document.createElement("img");
+      icon.src = source;
+      icon.alt = "";
+      icon.draggable = false;
+      icon.width = 24;
+      icon.height = 24;
+      icon.style.flexShrink = "0";
+      button.append(icon);
+    }
     button.append(label);
     button.addEventListener(
       "click",
@@ -203,7 +227,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     root.lang = locale;
     const words = labels[locale];
     menu.setAttribute("aria-label", words[0]);
-    nativeFont.render(menuLabel, "MENU");
+    paintMenuState(expanded && !hidden);
+    menu.title = words[0];
     for (const { button, label, index, action } of controls) {
       font.set(label, words[index]);
       button.setAttribute("aria-label", words[index]);
@@ -300,6 +325,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   update();
   return {
     dispose() {
+      if (disposed) return;
       disposed = true;
       viewport.dispose();
       events.abort();
@@ -311,7 +337,6 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       else if (sequenceSubscription && "destroy" in sequenceSubscription) void sequenceSubscription.destroy();
       else if (sequenceSubscription) void sequenceSubscription.close();
       document.defaultView?.cancelAnimationFrame(pressFrame);
-      nativeFont.dispose();
       font.dispose();
       if (typeof subscription === "function") void subscription();
       else if ("dispose" in subscription) void subscription.dispose();
