@@ -251,7 +251,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   z-index: 44;
   display: grid;
   place-items: start center;
-  overflow: hidden;
+  overflow: clip;
   color: #051233;
   text-shadow: none;
   pointer-events: none;
@@ -298,7 +298,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   width: var(--haneoka-chat-mask-width, 97.256182%);
   height: var(--haneoka-chat-mask-height, 210.05875%);
   z-index: 1;
-  overflow: hidden;
+  overflow: clip;
   border-radius: 9cqh;
   background:
     var(--haneoka-chat-background-image) center / 109.676% 104.46% no-repeat,
@@ -330,8 +330,8 @@ export const HANEOKA_THEME_CSS = String.raw`
   display: flex;
   width: 23.64857cqh;
   height: 5.832186cqh;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-end;
+  justify-content: flex-start;
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone__status-icon,
@@ -499,11 +499,21 @@ export const HANEOKA_THEME_CSS = String.raw`
   position: absolute;
   right: 0;
   left: 0;
+  display: block;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  touch-action: pan-y;
+  pointer-events: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+[data-vega-theme="haneoka"] .haneoka-phone__messages-content {
   display: flex;
   flex-direction: column;
   gap: .714286cqh;
-  box-sizing: border-box;
-  overflow: hidden;
   padding: 4.285714cqh;
 }
 
@@ -516,6 +526,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   display: flex;
   width: 100%;
   min-height: 9cqh;
+  flex-shrink: 0;
   align-items: flex-start;
 }
 

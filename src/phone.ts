@@ -1,5 +1,6 @@
 import { createHaneokaSdfBinding } from "./typography.js";
 import { applyPhoneTextProfile } from "./phoneText.js";
+import { bindPhoneScroll } from "./phoneScroll.js";
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { HANEOKA_UI_TEXT, haneokaUiLocale } from "./locale.js";
 import {
@@ -95,9 +96,13 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
   };
   let lastChat = "",
     lastMessages = "",
-    lastAssets = "";
+    lastAssets = "",
+    scrollWindow = "";
+  let disposed = false;
   const releaseAssets = captureStoryAssetProperties(context.root);
   const events = new AbortController();
+  const chatScroll = bindPhoneScroll(phone.messages, phone.messageContent, events.signal);
+  const lockScroll = bindPhoneScroll(phone.lockMessages, phone.lockContent, events.signal);
   const advance = (event: Event) => {
     event.stopPropagation();
     context.player.requestNext();
@@ -106,7 +111,7 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
   phone.frame.addEventListener(
     "keydown",
     (event) => {
-      if (!event.repeat && (event.key === "Enter" || event.key === " ")) {
+      if (event.target === phone.frame && !event.repeat && (event.key === "Enter" || event.key === " ")) {
         event.preventDefault();
         advance(event);
       }
@@ -114,6 +119,7 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
     { signal: events.signal },
   );
   const render = (immediate = false) => {
+    if (disposed) return;
     const state = context.state;
     if (state.seeking) return;
     if (!state.chat.visible && !lifecycle.sourceVisible && !lifecycle.window) return;
@@ -122,6 +128,8 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
       messages = `${state.chat.visible ? chatMessagesKey(state.chat.messages) : ""}\u0002${assetKey}`,
       signature = `${chatKey(state)}\u0002${messages}`;
     if (state.chat.visible && (immediate || signature !== lastChat)) {
+      chatScroll.beforeUpdate();
+      lockScroll.beforeUpdate();
       lastChat = signature;
       renderPhone(
         document,
@@ -135,6 +143,15 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
         assetKey,
       );
       lastMessages = messages;
+      const window = `${state.chat.windowAssetName}\u0000${state.chat.dataRoot}`;
+      const reset =
+        !lifecycle.sourceVisible ||
+        lifecycle.seekRevision !== context.player.seekRevision ||
+        phoneMode(state.chat.screenMode) !== lifecycle.screenMode ||
+        window !== scrollWindow;
+      scrollWindow = window;
+      chatScroll.afterUpdate(reset);
+      lockScroll.afterUpdate(reset);
     }
     updatePhoneLifecycle(phone, context, lifecycle, clock(document));
     phone.root.dataset.group = String(Boolean(state.chat.group));
@@ -148,6 +165,8 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
     const labels = HANEOKA_UI_TEXT[haneokaUiLocale(snapshot.settings.uiLanguage, document)];
     phone.root.setAttribute("aria-label", labels.phone);
     phone.frame.setAttribute("aria-label", labels.advancePhone);
+    phone.messages.setAttribute("aria-label", labels.phone);
+    phone.lockMessages.setAttribute("aria-label", labels.phone);
     const notifications = phone.root.querySelector<HTMLElement>(".haneoka-phone__lock-label"),
       incoming = phone.root.querySelector<HTMLElement>(".haneoka-phone__incoming-label");
     if (notifications) {
@@ -164,11 +183,14 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
   render();
   return {
     dispose() {
+      disposed = true;
       stop();
       unsubscribe?.();
       if (typeof subscription === "function") void subscription();
       else if (subscription && "dispose" in subscription) void subscription.dispose();
       events.abort();
+      chatScroll.dispose();
+      lockScroll.dispose();
       richText.dispose();
       releaseAssets();
       phone.root.remove();
@@ -182,7 +204,9 @@ interface PhoneElements {
   readonly batteryText: HTMLElement;
   readonly batteryFill: HTMLElement;
   readonly messages: HTMLElement;
+  readonly messageContent: HTMLElement;
   readonly lockMessages: HTMLElement;
+  readonly lockContent: HTMLElement;
   readonly typing: HTMLElement;
   readonly incomingName: HTMLElement;
 }
@@ -228,6 +252,10 @@ const createPhone = (document: Document): PhoneElements => {
   actions.append(call, rows);
   chatHeader.append(status, back, title, actions);
   const messages = node(document, "div", "haneoka-phone__messages");
+  messages.tabIndex = 0;
+  messages.setAttribute("role", "log");
+  const messageContent = node(document, "div", "haneoka-phone__messages-content");
+  messages.append(messageContent);
   const composer = node(document, "footer", "haneoka-phone__composer");
   for (const name of ["plus", "photo", "picture"]) {
     const action = node(document, "span", "haneoka-phone__composer-action");
@@ -250,6 +278,10 @@ const createPhone = (document: Document): PhoneElements => {
   applyPhoneTextProfile(lockLabel, "lockStatus");
   lockLabel.textContent = "通知センター";
   const lockMessages = node(document, "div", "haneoka-phone__lock-messages");
+  lockMessages.tabIndex = 0;
+  lockMessages.setAttribute("role", "log");
+  const lockContent = node(document, "div", "haneoka-phone__messages-content");
+  lockMessages.append(lockContent);
   lock.append(lockLabel, lockMessages);
 
   const incoming = node(document, "section", "haneoka-phone__incoming");
@@ -270,7 +302,9 @@ const createPhone = (document: Document): PhoneElements => {
     batteryText,
     batteryFill,
     messages,
+    messageContent,
     lockMessages,
+    lockContent,
     typing,
     incomingName,
   };
@@ -421,7 +455,7 @@ const renderPhone = (
   if (!messagesChanged) return;
   const mode = phoneMode(state.chat.screenMode);
   if (mode === "incoming") return;
-  const messagesHost = mode === "lock" ? phone.lockMessages : phone.messages;
+  const messagesHost = mode === "lock" ? phone.lockContent : phone.messageContent;
   renderPhoneMessages(
     document,
     messagesHost,
@@ -433,7 +467,6 @@ const renderPhone = (
     immediate,
     assetKey,
   );
-  messagesHost.scrollTop = messagesHost.scrollHeight;
 };
 
 const messageRows = new WeakMap<HTMLElement, Map<string, { element: HTMLElement; signature: string }>>();
@@ -452,7 +485,7 @@ const renderPhoneMessages = (
   const previous = messageRows.get(host) ?? new Map<string, { element: HTMLElement; signature: string }>();
   const next = new Map<string, { element: HTMLElement; signature: string }>();
   const occurrences = new Map<string, number>();
-  const lock = host.classList.contains("haneoka-phone__lock-messages");
+  const lock = !!host.closest(".haneoka-phone__lock-messages");
   for (const message of messages) {
     const ordinal = occurrences.get(message.id) ?? 0;
     occurrences.set(message.id, ordinal + 1);
@@ -469,6 +502,7 @@ const renderPhoneMessages = (
     }
     const item = node(document, "article", "haneoka-phone__message");
     item.dataset.messageId = message.id;
+    item.dataset.messageKey = key;
     item.dataset.self = String(Boolean(message.self));
     item.dataset.stamp = String(Boolean(message.stamp));
 
@@ -584,6 +618,7 @@ const resolveChatImage = (
     }
   }
   if (!resolved) return "";
+  resolved = preparedImage(context, resolved) ?? resolved;
   try {
     return storyRuntime().validateResourceUrl(resolved, `chat ${kind}`);
   } catch {
@@ -792,7 +827,7 @@ const applyStoryAssets = (
       (key === "chatLock" && mode === "lock") ||
       (key === "chatTextBox" && usesMessages) ||
       (key !== "chatLock" && key !== "chatTextBox" && usesChat);
-    setCssImage(root, property, required ? (assets?.[key] ?? derived[key]) : undefined);
+    setCssImage(root, property, required ? preparedImage(context, assets?.[key] ?? derived[key]) : undefined);
   }
   const chatIcons = {
     ...HANEOKA_CHAT_ICONS,
@@ -800,7 +835,11 @@ const applyStoryAssets = (
     ...assets?.chatIcons,
   };
   for (const [key, property] of Object.entries(CHAT_ICON_PROPERTIES)) {
-    setCssImage(root, property, usesChat ? chatIcons?.[key as keyof typeof chatIcons] : undefined);
+    setCssImage(
+      root,
+      property,
+      usesChat ? preparedImage(context, chatIcons?.[key as keyof typeof chatIcons]) : undefined,
+    );
   }
 
   const rect = {
@@ -846,6 +885,16 @@ const storyAssetKey = (
 };
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+
+const preparedImage = (context: VegaUiSlotContext, source: string | undefined): string | undefined => {
+  if (!source) return source;
+  const resources = context.resources as
+    | (NonNullable<VegaUiSlotContext["resources"]> & {
+        resolvePreparedRenderable?(source: string): string | undefined;
+      })
+    | undefined;
+  return resources?.resolvePreparedRenderable?.(source) ?? source;
+};
 
 const setCssImage = (root: HTMLElement, property: string, value: string | undefined): void => {
   if (!value) {
