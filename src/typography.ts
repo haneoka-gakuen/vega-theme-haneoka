@@ -22,6 +22,17 @@ import { haneokaTextLocale } from "./locale.js";
 import { createDynamicGlyph } from "./dynamicGlyph.js";
 import { nativeFontHasGlyph } from "./nativeFontCoverage.js";
 import { compactGlyphAtlases } from "./compactGlyphs.js";
+import { acquireWebTextStyle, observeWebText, usesWebText } from "./webText.js";
+import { NATIVE_EMOJI_SHEET } from "./emojiData.js";
+import {
+  decodeNativeEmojiSheet,
+  encodeNativeEmoji,
+  encodeNativeEmojiText,
+  isNativeEmojiCharacter,
+  isNativeEmojiQuad,
+  nativeEmojiFont,
+  paintNativeEmoji,
+} from "./emoji.js";
 
 type FontName = keyof typeof HANEOKA_SDF_ASSETS;
 type NativeFontName = keyof typeof HANEOKA_NATIVE_FONT_ASSETS;
@@ -171,6 +182,8 @@ export class HaneokaFontBank {
   readonly fonts = new Map<FontName, SdfFont>();
   readonly atlases = new Map<string, SdfAtlasPixels>();
   readonly listeners = new Set<() => void>();
+  emojiSheet: HTMLImageElement | undefined;
+  private readonly emojiPending = new Map<string, SharedRequest<HTMLImageElement>>();
   materials: Record<string, SdfMaterial> = {};
   shader = "";
   uiLanguage = "";
@@ -420,8 +433,24 @@ export class HaneokaFontBank {
     } catch (error) {
       if (signal?.aborted) throw error;
     }
+    // Resolve normal font characters before the single-code-point sprite fallback.
+    const possiblyEmoji = [...encodeNativeEmoji(text, this.chain(lang, phone))].some(isNativeEmojiCharacter);
+    if (possiblyEmoji) for (const name of chainForLanguage(lang, phone)) await this.prepareFont(name, signal);
+    const encoded = encodeNativeEmoji(text, this.chain(lang, phone));
+    const hasEmoji = [...encoded].some(isNativeEmojiCharacter);
+    if (hasEmoji && !this.emojiSheet) {
+      this.emojiSheet = await this.request(
+        this.emojiPending,
+        "sheet",
+        async (requestSignal) =>
+          decodeNativeEmojiSheet(this.document, await this.bytes(NATIVE_EMOJI_SHEET, requestSignal), requestSignal),
+        signal,
+      );
+    }
     const unresolved = new Set(
-      [...visibleSourceText(text)].filter((character) => !/[\r\n\u200b\u200c\u200d\ufeff]/u.test(character)),
+      [...visibleSourceText(encoded)].filter(
+        (character) => !isNativeEmojiCharacter(character) && !/[\r\n\u200b\u200c\u200d\ufeff]/u.test(character),
+      ),
     );
     const required = new Map<string, { font: SdfFont; atlas: number }>();
     const protectedKeys = new Set<string>();
@@ -568,6 +597,10 @@ export class HaneokaFontBank {
     this.nativeFonts.clear();
     this.nativeFontPending.clear();
     this.dynamicFonts.clear();
+    for (const pending of this.emojiPending.values()) pending.controller.abort();
+    this.emojiPending.clear();
+    this.emojiSheet?.removeAttribute("src");
+    this.emojiSheet = undefined;
     this.atlasPending.clear();
     this.fonts.clear();
     this.atlases.clear();
@@ -664,6 +697,7 @@ export interface HaneokaSdfBinding {
 }
 
 interface BindingEntry {
+  web: boolean;
   source: string;
   fullText: string;
   fullLayoutSignature: string;
@@ -706,7 +740,9 @@ const phoneRole = (element: HTMLElement): boolean =>
   element.dataset.textProfile ? element.dataset.textProfile.includes("NotoSans") : !!element.closest(".haneoka-phone");
 
 const atlasKeys = (layout: SdfTextLayout): readonly string[] => [
-  ...new Set(layout.quads.map((quad) => `${quad.font.id}:${quad.glyph.atlas}`)),
+  ...new Set(
+    layout.quads.filter((quad) => !isNativeEmojiQuad(quad)).map((quad) => `${quad.font.id}:${quad.glyph.atlas}`),
+  ),
 ];
 
 export function createHaneokaSdfBinding(
@@ -716,6 +752,7 @@ export function createHaneokaSdfBinding(
 ): HaneokaSdfBinding {
   const bank = haneokaFontBank(document, resources);
   const releaseBank = bank.acquireBinding();
+  const releaseWebTextStyle = acquireWebTextStyle(document);
   const entries = new Map<HTMLElement, BindingEntry>();
   const lifetime = new AbortController();
   const abortLifetime = () => {
@@ -753,7 +790,11 @@ export function createHaneokaSdfBinding(
     element.removeAttribute("data-haneoka-sdf");
     element.removeAttribute("data-haneoka-sdf-advance");
     element.style.position = entry.position;
-    if (entry.nativeFallbackFamily && entry.nativeFallbackSignature === entry.requestSignature) {
+    if (
+      !usesWebText(element) &&
+      entry.nativeFallbackFamily &&
+      entry.nativeFallbackSignature === entry.requestSignature
+    ) {
       element.dataset.haneokaNativeFontFallback = "true";
       element.style.setProperty("--haneoka-native-font-family", JSON.stringify(entry.nativeFallbackFamily));
       const language = fontLanguage(element);
@@ -786,7 +827,7 @@ export function createHaneokaSdfBinding(
 
   const draw = (element: HTMLElement, entry: BindingEntry): boolean => {
     if (disposed || lifetime.signal.aborted || !element.isConnected || !element.getClientRects().length) return false;
-    if (!bank.shader) return false;
+    if (usesWebText(element) || !bank.shader) return false;
     entry.accessible = contentElement(element);
     if (!entry.accessible.hasAttribute("data-haneoka-rich-text-owned"))
       entry.accessible.textContent = visibleSourceText(entry.source);
@@ -905,7 +946,7 @@ export function createHaneokaSdfBinding(
       return false;
     }
     let options: SdfTextLayoutOptions = {
-      fonts,
+      fonts: [...fonts, nativeEmojiFont(fonts[0]!)],
       fontSize,
       ruby: { scale: 0.5, verticalOffset: 1, alignment: "annotation" },
       maxWidth: nowrap || control ? Infinity : width,
@@ -924,8 +965,26 @@ export function createHaneokaSdfBinding(
       pixelScale: fontSize / (profile?.size ?? (phone ? 36 : speaker ? 36 : windowType === "default" ? 36 : 40)),
       parseColor,
     };
-    const layoutFor = (text: string, size = fontSize): SdfTextLayout =>
-      layoutSdfText(text, { ...options, fontSize: size });
+    const layoutFor = (text: string, size = fontSize): SdfTextLayout => {
+      const encoded = encodeNativeEmoji(text, fonts);
+      const indices = encodeNativeEmojiText(layoutSourceText(text), fonts).sourceIndices;
+      const result = layoutSdfText(encoded, { ...options, fontSize: size });
+      return {
+        ...result,
+        quads: result.quads.map((quad) => ({
+          ...quad,
+          characterIndex: indices[quad.characterIndex ?? 0] ?? quad.characterIndex ?? 0,
+        })),
+        ...(result.marks
+          ? {
+              marks: result.marks.map((mark) => ({
+                ...mark,
+                characterIndex: indices[mark.characterIndex ?? 0] ?? mark.characterIndex ?? 0,
+              })),
+            }
+          : {}),
+      };
+    };
     const layoutSignature = JSON.stringify([
       entry.fullText,
       width,
@@ -981,7 +1040,7 @@ export function createHaneokaSdfBinding(
     } else if (entry.fullLayoutFontSize !== undefined) {
       fontSize = entry.fullLayoutFontSize;
     }
-    if (layout.missing.length) return false;
+    if (layout.missing.length || (layout.quads.some(isNativeEmojiQuad) && !bank.emojiSheet)) return false;
     if (!entry.compacted) {
       const fullKeys = atlasKeys(layout);
       const fullPixels = new Map<string, SdfAtlasPixels>();
@@ -995,9 +1054,16 @@ export function createHaneokaSdfBinding(
         fullPixels.set(key, pixels);
         bytes += pixels.alpha.byteLength;
       }
-      if (bytes > 64 * 1024 * 1024) entry.compacted = compactGlyphAtlases(layout, fullPixels);
+      if (bytes > 64 * 1024 * 1024)
+        entry.compacted = compactGlyphAtlases(
+          { ...layout, quads: layout.quads.filter((quad) => !isNativeEmojiQuad(quad)) },
+          fullPixels,
+        );
     }
-    const drawingLayout = entry.compacted?.layout ?? layout;
+    const drawingLayout = entry.compacted?.layout ?? {
+      ...layout,
+      quads: layout.quads.filter((quad) => !isNativeEmojiQuad(quad)),
+    };
     const visibleLength = [...layoutSourceText(entry.source)].length;
     const shown = {
       ...drawingLayout,
@@ -1078,6 +1144,14 @@ export function createHaneokaSdfBinding(
         if (!context) throw new Error("SDF fallback canvas is unavailable");
         context.clearRect(0, 0, target.width, target.height);
         context.drawImage(rendered, 0, 0);
+        if (bank.emojiSheet)
+          paintNativeEmoji(
+            context,
+            bank.emojiSheet,
+            layout.quads.filter((quad) => isNativeEmojiQuad(quad) && (quad.characterIndex ?? 0) < visibleLength),
+            ratio,
+            padding,
+          );
         target.setAttribute("aria-hidden", "true");
         target.style.cssText = `display:block;position:absolute;max-width:none;max-height:none;left:${(parseFloat(style.paddingLeft) || 0) - padding}px;top:${-padding}px;width:${rendered.width / ratio}px;height:${rendered.height / ratio}px;pointer-events:none`;
         const flowWidth = nowrap || control || messageRow ? layout.width : width;
@@ -1131,7 +1205,7 @@ export function createHaneokaSdfBinding(
         });
 
   const schedulePrepare = (element: HTMLElement, entry: BindingEntry): void => {
-    if (disposed || lifetime.signal.aborted || !entry.source) return;
+    if (disposed || lifetime.signal.aborted || !entry.source || usesWebText(element)) return;
     const phone = phoneRole(element);
     const language = normalizeLanguageTag(fontLanguage(element));
     const role = phone ? "phone" : "default";
@@ -1261,6 +1335,28 @@ export function createHaneokaSdfBinding(
     }
   };
   bank.listeners.add(refresh);
+  const stopWebTextObserver = observeWebText(document, () => {
+    let changed = false;
+    for (const [element, entry] of entries) {
+      const web = usesWebText(element);
+      if (entry.web === web) continue;
+      changed = true;
+      entry.web = web;
+      entry.signature = "";
+      if (web) {
+        entry.requestRevision++;
+        entry.prepareController?.abort();
+        entry.prepareController = undefined;
+        entry.preparing = undefined;
+        showFallback(element, entry);
+        if (!entry.accessible.hasAttribute("data-haneoka-rich-text-owned"))
+          entry.accessible.textContent = visibleSourceText(entry.source);
+      }
+    }
+    if (!changed) return;
+    if ([...entries.keys()].every(usesWebText)) releasePainterLease();
+    refresh();
+  });
 
   const release = (element: HTMLElement): void => {
     const entry = entries.get(element);
@@ -1292,8 +1388,10 @@ export function createHaneokaSdfBinding(
         return false;
       }
       let entry = entries.get(element);
+      const sourceChanged = !entry || entry.source !== text;
       if (!entry) {
         entry = {
+          web: usesWebText(element),
           source: text,
           fullText,
           fullLayoutSignature: "",
@@ -1350,6 +1448,12 @@ export function createHaneokaSdfBinding(
         entry.signature = "";
         entry.accessible = contentElement(element);
       }
+      if (usesWebText(element)) {
+        showFallback(element, entry);
+        if (sourceChanged && !entry.accessible.hasAttribute("data-haneoka-rich-text-owned"))
+          entry.accessible.textContent = visibleSourceText(text);
+        return true;
+      }
       schedulePrepare(element, entry);
       try {
         const rendered = draw(element, entry);
@@ -1377,6 +1481,8 @@ export function createHaneokaSdfBinding(
       signal.removeEventListener("abort", abortLifetime);
       lifetime.abort();
       observer?.disconnect();
+      stopWebTextObserver();
+      releaseWebTextStyle();
       bank.listeners.delete(refresh);
       for (const element of [...entries.keys()]) release(element);
       releasePainterLease();

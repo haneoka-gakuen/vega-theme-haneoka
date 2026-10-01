@@ -1,5 +1,6 @@
 import type { VegaRichTextHandle, VegaRichTextService } from "@haneoka/vega-plugin-richtext";
 import type { HaneokaSdfBinding } from "./typography.js";
+import { observeWebText, usesWebText } from "./webText.js";
 
 export interface HaneokaRichTextPresenter {
   render(element: HTMLElement, value: unknown, immediate?: boolean, fullText?: string): void;
@@ -50,6 +51,8 @@ export const createHaneokaRichTextPresenter = (
   sdf?: HaneokaSdfBinding,
 ): HaneokaRichTextPresenter => {
   const signatures = new WeakMap<HTMLElement, string>();
+  const sources = new Map<HTMLElement, { value: unknown; fullText: string | undefined; web: boolean }>();
+  let stopWebTextObserver: (() => void) | undefined;
   const handles = new Map<HTMLElement, VegaRichTextHandle>();
   const languageOverrides = new Map<HTMLElement, { previous: string | null; applied: string }>();
 
@@ -76,10 +79,22 @@ export const createHaneokaRichTextPresenter = (
     sdf?.release(element);
     releaseDomHandle(element);
     restoreLanguage(element);
+    sources.delete(element);
   };
 
-  return {
+  const presenter: HaneokaRichTextPresenter = {
     render(element, value, immediate = false, fullText) {
+      if (!stopWebTextObserver)
+        stopWebTextObserver = observeWebText(element.ownerDocument, () => {
+          for (const [target, source] of sources) {
+            if (!target.isConnected || source.web === usesWebText(target)) continue;
+            signatures.delete(target);
+            presenter.render(target, source.value, true, source.fullText);
+          }
+        });
+      const web = usesWebText(element);
+      sources.set(element, { value, fullText, web });
+      if (web && signatures.get(element) === sourceSignature(value)) return;
       element.dir = "auto";
       const authoredLanguage = sourceLanguage(value);
       if (authoredLanguage) {
@@ -143,7 +158,7 @@ export const createHaneokaRichTextPresenter = (
     },
     releaseWithin(root) {
       sdf?.releaseWithin(root);
-      for (const element of handles.keys()) {
+      for (const element of [...sources.keys()]) {
         if (element === root || root.contains(element)) release(element);
       }
       for (const element of languageOverrides.keys()) {
@@ -151,10 +166,13 @@ export const createHaneokaRichTextPresenter = (
       }
     },
     dispose() {
+      stopWebTextObserver?.();
+      sources.clear();
       sdf?.dispose();
       for (const handle of handles.values()) handle.dispose();
       handles.clear();
       for (const element of languageOverrides.keys()) restoreLanguage(element);
     },
   };
+  return presenter;
 };
