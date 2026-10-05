@@ -16,7 +16,8 @@ import {
   type VegaDisposable,
   type VegaUiSlotContext,
 } from "@haneoka/vega/plugin";
-import { VEGA_RICH_TEXT_SERVICE } from "@haneoka/vega-plugin-richtext";
+import { VEGA_RICH_TEXT_SERVICE, bindWebTextSelection } from "@haneoka/vega-plugin-richtext";
+import { usesWebText } from "./webText.js";
 import { storyRuntime } from "@haneoka/vega/runtime";
 import {
   HANEOKA_THEME_HOST,
@@ -120,11 +121,19 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
     : undefined;
   typingObserver?.observe(phone.typing.parentElement!);
   typingObserver?.observe(phone.frame);
+  const textSelection = bindWebTextSelection(phone.root, {
+    textSelector: "[data-haneoka-text-content], [data-text-profile]",
+    enabled: () => usesWebText(phone.root),
+    revision: () => `${context.state.commandIndex}:${context.player.seekRevision}`,
+    signal: context.signal,
+  });
   const advance = (event: Event) => {
     event.stopPropagation();
-    const state = context.state;
-    if (state.chat.visible && !state.seeking && !state.loading && !state.error && !state.choices.visible)
-      context.player.requestNext();
+    textSelection.requestAdvance(event, () => {
+      const state = context.state;
+      if (state.chat.visible && !state.seeking && !state.loading && !state.error && !state.choices.visible)
+        context.player.requestNext();
+    });
   };
   phone.frame.addEventListener("click", advance, { signal: events.signal });
   // The phone overlay owns only its otherwise empty stage area. Frame taps
@@ -216,6 +225,7 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
       if (typeof subscription === "function") void subscription();
       else if (subscription && "dispose" in subscription) void subscription.dispose();
       events.abort();
+      textSelection.dispose();
       chatScroll.dispose();
       lockScroll.dispose();
       typingObserver?.disconnect();

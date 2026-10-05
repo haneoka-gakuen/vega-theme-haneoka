@@ -1,7 +1,8 @@
 import { bindHaneokaViewport } from "./viewport.js";
 import { createAdvTextRenderValue, type VegaDisposable, type VegaUiSlotContext } from "@haneoka/vega/plugin";
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
-import { VEGA_RICH_TEXT_SERVICE } from "@haneoka/vega-plugin-richtext";
+import { VEGA_RICH_TEXT_SERVICE, bindWebTextSelection } from "@haneoka/vega-plugin-richtext";
+import { usesWebText } from "./webText.js";
 import { createHaneokaRichTextPresenter } from "./rich-text.js";
 import { createHaneokaSdfBinding, haneokaFontBank } from "./typography.js";
 import { createHaneokaScene, loadHaneokaScenes, type HaneokaScene } from "./scene.js";
@@ -49,9 +50,15 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
     choiceLanguage = "",
     choiceVisible = false;
   let choiceItems = context.state.choices.items.map(({ key, text, enabled, lang }) => ({ key, text, enabled, lang }));
+  const textSelection = bindWebTextSelection(root, {
+    textSelector: "[data-haneoka-text-content], [data-text-profile]",
+    enabled: () => usesWebText(root),
+    revision: () => `${context.state.commandIndex}:${context.player.seekRevision}`,
+    signal: context.signal,
+  });
   const advance = (event: Event) => {
     event.stopPropagation();
-    context.player.requestNext();
+    textSelection.requestAdvance(event, () => context.player.requestNext());
   };
   let refresh = () => {};
   const subscription = shell?.subscribe((snapshot) => {
@@ -91,6 +98,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
             "keydown",
             (event) => {
               if (
+                event.target === scene.root &&
                 !event.repeat &&
                 !event.isComposing &&
                 !event.ctrlKey &&
@@ -367,6 +375,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
       viewport.dispose();
       document.defaultView?.cancelAnimationFrame(frame);
       events.abort();
+      textSelection.dispose();
       for (const disposeCaption of captionDisposers) disposeCaption();
       captionDisposers.length = 0;
       unsubscribe?.();

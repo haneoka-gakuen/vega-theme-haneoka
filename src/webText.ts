@@ -16,6 +16,14 @@ export const HANEOKA_WEB_TEXT_CSS = String.raw`
 [data-vega-theme][data-vega-web-text="true"] [data-text-profile] {
   line-height:1.4 !important;
 }
+[data-vega-theme][data-vega-web-text="true"] :is([data-text-profile], [data-haneoka-text-content]):not(
+  :is(button, a, input, select, textarea, [contenteditable], .haneoka-controls, .haneoka-native-controls, [data-haneoka-sdf], canvas),
+  :is(button, a, input, select, textarea, [contenteditable], .haneoka-controls, .haneoka-native-controls, [data-haneoka-sdf], canvas) *
+) {
+  -webkit-user-select:text;
+  user-select:text;
+  pointer-events:auto;
+}
 `;
 
 const styles = new WeakMap<Document, { element: HTMLStyleElement; users: number }>();
