@@ -1,19 +1,28 @@
+import type { VegaWebUiSlotContext as VegaUiSlotContext } from "@haneoka/vega/web/ui";
 import { bindHaneokaViewport } from "./viewport.js";
 import { resolveEase } from "@haneoka/vega/renderer-kit";
 import { createHaneokaMenuEntry } from "./menuEntry.js";
 import { HANEOKA_CONTROL_ASSETS } from "./controlAssets.js";
-import type { VegaDisposable, VegaUiSlotContext } from "@haneoka/vega/plugin";
+import { HANEOKA_DISPLAY_NAME_JOINER } from "./controlLabels.js";
+import type { VegaDisposable } from "@haneoka/vega/plugin";
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { HANEOKA_STORY_SEQUENCE, HANEOKA_THEME_HOST } from "./host.js";
 import { createHaneokaShellTypography } from "./shellTypography.js";
 import { haneokaUiLocale, HANEOKA_QUICKBAR_TEXT as labels } from "./locale.js";
 import { mountHaneokaProgress } from "./progress.js";
+import controlLayout from "./playerControls.json";
 export const HANEOKA_CONTROLS_ID = "haneoka-controls";
 let nextQuickbarId = 0;
 
 export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotContext): VegaDisposable {
   const controller = context.services(VEGA_SHELL_CONTROLLER);
   if (!controller) throw new Error("A shell controller is required");
+  // UI slots mount before boot, so every native Talk/Chat uses this original
+  // localized display value. Explicit author/host formats remain authoritative.
+  const ownsNameJoiner =
+    context.player.runtime.displayNameJoiner === undefined &&
+    (!context.player.runtime.targetNameSplitKey || context.player.runtime.targetNameSplitKey === "・");
+  if (ownsNameJoiner) context.player.runtime.displayNameJoiner = HANEOKA_DISPLAY_NAME_JOINER;
   const adapter = context.services(HANEOKA_THEME_HOST);
   const sequence = context.services(HANEOKA_STORY_SEQUENCE);
   // The host renders the transport itself; the in-game menu stays.
@@ -81,6 +90,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   let disposed = false,
     frame = 0,
     signature = "",
+    labelLocale = "",
     toastTimer: ReturnType<typeof setTimeout> | undefined,
     snapshot = controller.snapshot();
   const message = (value: string) => {
@@ -115,9 +125,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     ...(progress || adapter?.setPlaybackControlsVisible
       ? ([
           [
-            "progress",
-            15,
-            () => {
+            "progress", () => {
               const visible = adapter?.externalPlaybackControls
                 ? (adapter.snapshot().playbackControlsVisible ?? false)
                 : (progress?.visible ?? false);
@@ -127,47 +135,55 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
           ],
         ] as const)
       : []),
-    ["skip", 2, () => context.player.skip()],
-    ["auto", 1, () => controller.toggleAuto()],
-    ["fast", 13, () => controller.toggleFastForward()],
+    ["skip", () => context.player.skip()],
+    ["auto", () => controller.toggleAuto()],
+    ["fast", () => controller.toggleFastForward()],
     ...(sequence
       ? ([
-          ["continuous", 11, () => sequence.toggleContinuous()],
-          ["interrupt", 12, () => sequence.interrupt()],
+          ["continuous", () => sequence.toggleContinuous()],
+          ["interrupt", () => sequence.interrupt()],
         ] as const)
       : []),
-    ["log", 3, () => controller.open("backlog")],
-    ["fullscreen", 10, () => (adapter ? adapter.toggleFullscreen() : context.root.requestFullscreen?.())],
-    ["subtitles", 9, () => controller.setSetting("subtitlesEnabled", !controller.snapshot().settings.subtitlesEnabled)],
+    ["log", () => controller.open("backlog")],
+    ["fullscreen", () => (adapter ? adapter.toggleFullscreen() : context.root.requestFullscreen?.())],
+    ["subtitles", () => controller.setSetting("subtitlesEnabled", !controller.snapshot().settings.subtitlesEnabled)],
     [
-      "save",
-      4,
-      async () => {
+      "save", async () => {
         await controller.quickSave();
-        message(labels[haneokaUiLocale(controller.snapshot().settings.uiLanguage, document)][8]);
+        message(labels[haneokaUiLocale(controller.currentSettings?.uiLanguage ?? snapshot.settings.uiLanguage, document)].saved);
       },
     ],
-    ["load", 5, () => controller.open("load")],
-    ["more", 14, () => controller.open("menu")],
+    ["load", () => controller.open("load")],
+    ["more", () => controller.open("menu")],
+    ["settings", () => controller.open("settings")],
+    ["replay", () => controller.start()],
     [
-      "hide",
-      6,
-      () => {
+      "hide", () => {
         context.root.dataset.vegaUiHidden = "true";
       },
     ],
   ] as const;
-  const controls = actions.map(([action, index, execute]) => {
+  const ordered = controlLayout.groups.flatMap(({ id, actions: names }) =>
+    names.flatMap((name) => {
+      const action = actions.find(([key]) => key === name);
+      return action ? [{ group: id, action }] : [];
+    }),
+  );
+  let previousGroup = "";
+  const controls = ordered.map(({ group, action: [action, execute] }) => {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.action = action;
+    button.dataset.group = group;
+    if (previousGroup && previousGroup !== group) button.dataset.groupStart = "true";
+    previousGroup = group;
     button.style.minHeight = "44px";
     button.style.display = "flex";
     button.style.alignItems = "center";
     button.style.gap = "8px";
     const label = document.createElement("span");
     label.className = "haneoka-control-label";
-    const source = HANEOKA_CONTROL_ASSETS[action as keyof typeof HANEOKA_CONTROL_ASSETS];
+    const source = HANEOKA_CONTROL_ASSETS[(action === "settings" ? "more" : action) as keyof typeof HANEOKA_CONTROL_ASSETS];
     if (source) {
       const icon = document.createElement("img");
       icon.src = source;
@@ -191,7 +207,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       { signal: events.signal },
     );
     quick.append(button);
-    return { button, label, index, action };
+    return { button, label, action };
   });
   const skip = document.createElement("button");
   skip.type = "button";
@@ -224,14 +240,20 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     quick.dataset.open = String(expanded && !hidden);
     quick.inert = !expanded || hidden;
     menu.setAttribute("aria-expanded", String(expanded && !hidden));
-    root.lang = locale;
+    if (root.lang !== locale) root.lang = locale;
     const words = labels[locale];
-    menu.setAttribute("aria-label", words[0]);
+    const relabel = labelLocale !== locale;
+    labelLocale = locale;
+    if (relabel) {
+      menu.setAttribute("aria-label", words.menu);
+      menu.title = words.menu;
+    }
     paintMenuState(expanded && !hidden);
-    menu.title = words[0];
-    for (const { button, label, index, action } of controls) {
-      font.set(label, words[index]);
-      button.setAttribute("aria-label", words[index]);
+    for (const { button, label, action } of controls) {
+      if (relabel) {
+        font.set(label, words[action]);
+        button.setAttribute("aria-label", words[action]);
+      }
       if (
         action === "auto" ||
         action === "progress" ||
@@ -258,7 +280,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
         );
     }
     skip.hidden = !context.state.video.visible;
-    font.set(skipLabel, words[7]);
+    if (relabel) font.set(skipLabel, words.skipVideo);
   };
   const releasePress = () => {
     if (!pressed) return;
@@ -338,6 +360,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
       else if (sequenceSubscription) void sequenceSubscription.close();
       document.defaultView?.cancelAnimationFrame(pressFrame);
       font.dispose();
+      if (ownsNameJoiner && context.player.runtime.displayNameJoiner === HANEOKA_DISPLAY_NAME_JOINER)
+        delete context.player.runtime.displayNameJoiner;
       if (typeof subscription === "function") void subscription();
       else if ("dispose" in subscription) void subscription.dispose();
       else if ("destroy" in subscription) void subscription.destroy();

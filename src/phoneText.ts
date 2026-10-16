@@ -1,3 +1,5 @@
+import type { HaneokaChatSourceRole } from "@haneoka/vega-plugin-haneoka/chat-profile";
+
 export const HANEOKA_PHONE_TEXT = {
   title: {
     size: 34.5,
@@ -109,14 +111,23 @@ export const HANEOKA_PHONE_TEXT = {
   },
 } as const;
 
-export function applyPhoneTextProfile(element: HTMLElement, role: keyof typeof HANEOKA_PHONE_TEXT): void {
+export function applyPhoneTextProfile(
+  element: HTMLElement,
+  role: keyof typeof HANEOKA_PHONE_TEXT,
+  layout?: Pick<NonNullable<HaneokaChatSourceRole["text"]>, "wrappingMode" | "overflowMode">,
+): void {
   const profile = HANEOKA_PHONE_TEXT[role];
-  element.dataset.textProfile = JSON.stringify(profile);
+  element.dataset.textProfile = JSON.stringify({ ...profile, ...layout });
   element.style.fontSize = `${profile.size / 7}cqh`;
   element.style.fontWeight = profile.bold ? "700" : "400";
   element.style.letterSpacing = `${profile.characterSpacing / 100}em`;
-  element.style.color = `rgba(${profile.color
-    .slice(0, 3)
-    .map((value) => value * 255)
-    .join(",")},${profile.color[3]})`;
+  if (layout) {
+    element.style.whiteSpace = layout.wrappingMode === 0 || layout.wrappingMode === 3 ? "pre" : "pre-wrap";
+    element.style.overflow = layout.overflowMode === 0 ? "visible" : "";
+    element.style.textOverflow = layout.overflowMode === 0 ? "clip" : "";
+  } else {
+    element.style.removeProperty("white-space");
+    element.style.removeProperty("overflow");
+    element.style.removeProperty("text-overflow");
+  }
 }

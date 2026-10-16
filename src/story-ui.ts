@@ -1,5 +1,6 @@
+import type { VegaWebUiSlotContext as VegaUiSlotContext } from "@haneoka/vega/web/ui";
 import { bindHaneokaViewport } from "./viewport.js";
-import { createAdvTextRenderValue, type VegaDisposable, type VegaUiSlotContext } from "@haneoka/vega/plugin";
+import { createAdvTextRenderValue, type VegaDisposable } from "@haneoka/vega/plugin";
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { VEGA_RICH_TEXT_SERVICE, bindWebTextSelection } from "@haneoka/vega-plugin-richtext";
 import { usesWebText } from "./webText.js";
@@ -58,7 +59,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
   });
   const advance = (event: Event) => {
     event.stopPropagation();
-    textSelection.requestAdvance(event, () => context.player.requestNext());
+    textSelection.requestAdvance(event, () => context.actions.dispatch({ type: "advance" }));
   };
   let refresh = () => {};
   const subscription = shell?.subscribe((snapshot) => {
@@ -342,7 +343,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
               "click",
               (event) => {
                 event.stopPropagation();
-                context.player.choose(item.key);
+                context.actions.dispatch({ type: "choose", key: item.key });
               },
               { signal: events.signal },
             );

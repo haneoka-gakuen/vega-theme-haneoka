@@ -1,7 +1,37 @@
-import type { VegaUiSlotContext } from "@haneoka/vega/plugin";
+import type { VegaWebUiSlotContext as VegaUiSlotContext } from "@haneoka/vega/web/ui";
+
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { createHaneokaIcon } from "./icons.js";
 import { haneokaUiLocale, HANEOKA_PROGRESS_TEXT as text } from "./locale.js";
+
+/** Current preparation work, independent of the story's playback position. */
+export function readHaneokaLoadingProgress(state: VegaUiSlotContext["state"], aborted = false) {
+  const preload = state.preload as typeof state.preload & {
+    loadedBytes?: number;
+    totalBytes?: number;
+    byteBasis?: "decoded" | "identity";
+  };
+  const finite = (value: unknown): number | undefined =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+  const status = aborted ? "cancelled" : state.error ? "error" : state.loading ? "loading" : "idle";
+  const done = aborted ? undefined : finite(preload.done);
+  const total = aborted ? undefined : finite(preload.total);
+  const failures = aborted ? [] : [...preload.failures];
+  const knownTotal = total !== undefined && total > 0 && done !== undefined && done <= total;
+  const byteBasis = preload.byteBasis === "decoded" || preload.byteBasis === "identity" ? preload.byteBasis : undefined;
+  return {
+    status,
+    phase: aborted ? "" : preload.label,
+    processedTasks: total !== undefined && total > 0 && done !== undefined && done > total ? undefined : done,
+    totalTasks: knownTotal ? total : undefined,
+    // The loader's done count includes failed work. It is not loaded files.
+    value: status === "loading" && knownTotal && !failures.length ? done / total : undefined,
+    failures,
+    loadedBytes: aborted ? undefined : finite(preload.loadedBytes),
+    totalBytes: aborted || !byteBasis ? undefined : finite(preload.totalBytes),
+    byteBasis: aborted ? undefined : byteBasis,
+  };
+}
 
 export interface HaneokaProgressControl {
   readonly visible: boolean;
@@ -19,6 +49,28 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
   transport.className = "haneoka-progress";
   transport.hidden = true;
   transport.dataset.vegaUiSlot = "controls";
+  const preparation = document.createElement("output");
+  preparation.setAttribute("role", "status");
+  preparation.dataset.vegaUiSlot = "controls";
+  preparation.dataset.vegaLoadingCounts = "";
+  Object.assign(preparation.style, {
+    position: "absolute",
+    inset: "58% 10% auto",
+    textAlign: "center",
+    zIndex: "76",
+    pointerEvents: "none",
+    fontSize: "max(12px, 2cqh)",
+  });
+  preparation.hidden = true;
+  context.root.append(preparation);
+  context.signal.addEventListener(
+    "abort",
+    () => {
+      preparation.hidden = true;
+      preparation.value = "";
+    },
+    { once: true, signal: events.signal },
+  );
   const play = document.createElement("button");
   play.type = "button";
   Object.assign(play.style, { width: "44px", height: "44px", flexBasis: "44px" });
@@ -49,6 +101,7 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
   let interaction = 0;
   let frame = 0;
   let lastSignature = "";
+  let preparationSignature = "";
   let snapshot = shell.snapshot();
   const subscription = shell.subscribe((next) => {
     snapshot = next;
@@ -144,6 +197,19 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
   );
 
   function paint(): void {
+    const loading = readHaneokaLoadingProgress(context.state, context.signal.aborted);
+    const preparationText =
+      loading.status !== "loading"
+        ? ""
+        : loading.totalTasks === undefined
+          ? loading.processedTasks ? String(loading.processedTasks) : ""
+          : `${loading.processedTasks} / ${loading.totalTasks}`;
+    const nextPreparation = `${loading.status}|${preparationText}`;
+    if (nextPreparation !== preparationSignature) {
+      preparationSignature = nextPreparation;
+      preparation.hidden = loading.status !== "loading";
+      preparation.value = preparationText;
+    }
     const timeline = player.currentSeekProgress();
     const labels = text[haneokaUiLocale(snapshot.settings.uiLanguage, document)];
     const playing = context.state.playing && !context.state.paused;
@@ -205,6 +271,7 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
       else if ("destroy" in subscription) void subscription.destroy();
       else void subscription.close();
       transport.remove();
+      preparation.remove();
       if (stage) {
         if (previousBottom) stage.style.setProperty("bottom", previousBottom, previousBottomPriority);
         else stage.style.removeProperty("bottom");

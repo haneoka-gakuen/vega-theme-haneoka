@@ -1,6 +1,8 @@
 import { createHaneokaShellTypography } from "./shellTypography.js";
 import { prepareHaneokaFonts } from "./typography.js";
-import { chatDefaultDataRoot, chatIconImagePath, isAdvChatIconAssetName, iterateAdvCommands } from "@haneoka/vega";
+import { prepareHaneokaPhoneMasks } from "./phone.js";
+import { chatDefaultDataRoot, iterateAdvCommands } from "@haneoka/vega";
+import { resolveHaneokaChatImage } from "./chatImages.js";
 import {
   ADV_COMMAND,
   STORY_FRAME_LAYOUT_PROVIDER,
@@ -50,48 +52,6 @@ const texture = (source: string | undefined, label: string): StoryResourceDeclar
 
 const resolveHostSource = resolveHaneokaSourceAsset;
 
-const resolveHostChatImage = (
-  host: HaneokaThemeAssetProvider | undefined,
-  value: unknown,
-  kind: "icon" | "stamp",
-): string => {
-  const source = String(value ?? "").trim();
-  if (!source) return "";
-  try {
-    return host?.resolveChatImage?.(source, kind) ?? "";
-  } catch {
-    return "";
-  }
-};
-
-const resolveThemeChatImage = (
-  host: HaneokaThemeAssetProvider | undefined,
-  runtime: StoryResourcePreparationContext["runtime"],
-  value: unknown,
-  kind: "icon" | "stamp",
-  activeRoot: string,
-): string => {
-  const source = String(value ?? "").trim();
-  if (!source) return "";
-  const hostResolved = resolveHostChatImage(host, source, kind);
-  if (hostResolved) return hostResolved;
-  if (/^(?:data:|blob:|https?:\/\/|\/)/iu.test(source)) return source;
-  if (kind === "icon" && isAdvChatIconAssetName(source)) {
-    return resolveHostSource(host, chatIconImagePath(source, runtime) || source);
-  }
-  const file = source.endsWith(".png") ? source : `${source}.png`;
-  const defaultRoot = chatDefaultDataRoot(runtime) || HANEOKA_CHAT_DATA_ROOT;
-  const lineRoot = chatLineDataRoot(defaultRoot);
-  const path = source.includes("/")
-    ? file
-    : /^ADVChat/iu.test(source)
-      ? `${lineRoot}/${file}`
-      : /^(?:Icon|stamp)/iu.test(source)
-        ? `${defaultRoot}/${file}`
-        : `${activeRoot || defaultRoot}/${file}`;
-  return resolveHostSource(host, path);
-};
-
 const haneokaThemeResources = (
   host: HaneokaThemeAssetProvider | undefined,
   assets: HaneokaThemeAssets | undefined,
@@ -109,6 +69,7 @@ const haneokaThemeResources = (
   }
   const chatAssets = runtime.chatAssets;
   const rootModes = new Map<string, Set<number>>();
+  const rootWindows = new Map<string, Set<string>>();
   const chatImages = new Set<string>();
   let usesPhoneUi = false;
   const defaultRoot = chatDefaultDataRoot(runtime) || HANEOKA_CHAT_DATA_ROOT;
@@ -147,13 +108,19 @@ const haneokaThemeResources = (
         activeRoot = root || defaultRoot;
       }
       noteRootMode(root || activeRoot, activeMode);
+      if (windowAsset) {
+        const normalizedRoot = (root || activeRoot).replace(/\/+$/u, "");
+        const windows = rootWindows.get(normalizedRoot) ?? new Set<string>();
+        windows.add(windowAsset);
+        rootWindows.set(normalizedRoot, windows);
+      }
       const referencedImages = [
         [command.chatIconAssetName || master?.chatIconAssetName, "icon"],
         [commandCode === ADV_COMMAND.ChatTalk ? command.targetAssetName : undefined, "icon"],
         [commandCode === ADV_COMMAND.ChatStamp ? command.targetAssetName : undefined, "stamp"],
       ] as const;
       for (const [value, kind] of referencedImages) {
-        const resolved = resolveThemeChatImage(host, runtime, value, kind, root || activeRoot);
+        const resolved = resolveHaneokaChatImage(host, runtime, value, kind, root || activeRoot);
         if (resolved) chatImages.add(resolved);
       }
     }
@@ -209,24 +176,34 @@ const haneokaThemeResources = (
     if (rootModes.size === 0) {
       for (const mode of usedModes) noteRootMode(declaredDefaultRoot, mode);
     }
+    let needsBackgroundFallback = false;
     for (const [root, modes] of rootModes) {
-      const skin = haneokaChatSkin("", root);
-      if (assets?.chatWindow == null) {
-        add(texture(resolveHostSource(host, skin?.window ?? `${root}/chatwindow_image.png`), "Haneoka chat window"));
-      }
-      if (modes.has(0) && assets?.chatBackground == null) {
-        add(
-          texture(
-            resolveHostSource(host, skin ? (skin.background ?? "") : `${root}/back.png`),
-            "Haneoka chat background",
-          ),
-        );
-      }
-      if (modes.has(2) && assets?.chatLock == null) {
-        add(texture(resolveHostSource(host, skin ? (skin.lock ?? "") : `${root}/lock.png`), "Haneoka chat lock"));
+      for (const windowAsset of rootWindows.get(root) ?? [""]) {
+        const skin = haneokaChatSkin(windowAsset, root);
+        if (modes.has(0) && !skin?.sourceProfile) needsBackgroundFallback = true;
+        if (skin?.sourceProfile) {
+          for (const role of modes.has(2) ? ["mask", "lockBackground"] : ["mask"]) {
+            const source = skin.sourceProfile.roles[role]?.image?.source;
+            if (source) add(texture(resolveHostSource(host, source), `Haneoka chat ${role}`));
+          }
+        }
+        if (assets?.chatWindow == null) {
+          add(texture(resolveHostSource(host, skin?.window ?? `${root}/chatwindow_image.png`), "Haneoka chat window"));
+        }
+        if (modes.has(0) && assets?.chatBackground == null) {
+          add(
+            texture(
+              resolveHostSource(host, skin ? (skin.background ?? "") : `${root}/back.png`),
+              "Haneoka chat background",
+            ),
+          );
+        }
+        if (modes.has(2) && assets?.chatLock == null) {
+          add(texture(resolveHostSource(host, skin ? (skin.lock ?? "") : `${root}/lock.png`), "Haneoka chat lock"));
+        }
       }
     }
-    if (usedModes.has(0) && declaredDefaultRoot && assets?.chatBackgroundFallback == null) {
+    if (needsBackgroundFallback && declaredDefaultRoot && assets?.chatBackgroundFallback == null) {
       add(texture(resolveHostSource(host, `${declaredDefaultRoot}/back.png`), "Haneoka fallback chat background"));
     }
     if ((usedModes.has(0) || usedModes.has(2)) && assets?.chatTextBox == null) {
@@ -275,6 +252,17 @@ export const vegaHaneokaTheme = defineVegaPlugin({
       create: createHaneokaShellTypography,
     });
     const themeHost = () => context.service(HANEOKA_THEME_HOST);
+    const resources = (preparation: StoryResourcePreparationContext) => {
+      const legacyHost = themeHost();
+      const host = context.service(HANEOKA_THEME_ASSETS) ?? legacyHost;
+      let assets: HaneokaThemeAssets | undefined;
+      try {
+        assets = host?.assets?.();
+      } catch {
+        assets = undefined;
+      }
+      return haneokaThemeResources(host, assets, preparation, Boolean(legacyHost?.externalPlaybackControls));
+    };
     context.contribute("theme", {
       id: HANEOKA_THEME_ID,
       name: "Haneoka",
@@ -287,24 +275,27 @@ export const vegaHaneokaTheme = defineVegaPlugin({
         accentSecondary: "#ef8aa7",
       },
       cssText: HANEOKA_THEME_CSS,
-      prepareStoryResources: prepareHaneokaFonts,
-      enumerateStoryResources(preparation) {
-        const legacyHost = themeHost();
-        const host = context.service(HANEOKA_THEME_ASSETS) ?? legacyHost;
-        let assets: HaneokaThemeAssets | undefined;
-        try {
-          assets = host?.assets?.();
-        } catch {
-          assets = undefined;
-        }
-        return haneokaThemeResources(host, assets, preparation, Boolean(legacyHost?.externalPlaybackControls));
+      async prepareStoryResources(preparation) {
+        await Promise.all([
+          prepareHaneokaFonts(preparation),
+          prepareHaneokaPhoneMasks(
+            preparation,
+            resources(preparation)
+              .filter((entry) =>
+                ["Haneoka chat mask", "Haneoka chat text box", "Haneoka chatTextBox"].includes(entry.label ?? ""),
+              )
+              .map((entry) => entry.source),
+          ),
+        ]);
       },
+      enumerateStoryResources: resources,
     });
     context.contribute(
       "ui-slot",
       {
         id: "haneoka-story-ui",
         name: "Haneoka story UI",
+        hostKind: "web",
         slot: "dialogue",
         replace: true,
         mount: mountHaneokaStoryUi,
@@ -320,6 +311,7 @@ export const vegaHaneokaTheme = defineVegaPlugin({
       {
         id: HANEOKA_CONTROLS_ID,
         name: "Haneoka game controls",
+        hostKind: "web",
         slot: "controls",
         replace: true,
         requiredServices: [VEGA_SHELL_CONTROLLER],

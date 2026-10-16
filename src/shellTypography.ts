@@ -1,4 +1,5 @@
-import type { VegaUiSlotContext } from "@haneoka/vega/plugin";
+import type { VegaWebUiSlotContext as VegaUiSlotContext } from "@haneoka/vega/web/ui";
+
 import type { VegaShellTextRenderer } from "@haneoka/vega/shell";
 import { createHaneokaSdfBinding } from "./typography.js";
 const profile = JSON.stringify({
@@ -12,6 +13,11 @@ export function createHaneokaShellTypography(context: VegaUiSlotContext): VegaSh
   const binding = createHaneokaSdfBinding(context.root.ownerDocument, context.resources, context.signal);
   return {
     set(element, text) {
+      // Shell pages use selectable DOM text. Gameplay labels retain source SDF.
+      if (element.closest('.vega-shell')) {
+        if (element.textContent !== text) element.textContent = text;
+        return;
+      }
       if (element.classList.contains("vega-shell__eyebrow")) {
         element.textContent = text;
         return;

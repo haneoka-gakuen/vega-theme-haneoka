@@ -1,5 +1,6 @@
 import { HANEOKA_UI_SCENES, HANEOKA_UI_SPRITES } from "./uiAssets.js";
 import { HANEOKA_CAPTION_SCENES } from "./captionScenes.js";
+import { composeGradientSprite, gradientCss, type SceneGradient } from "./gradient-sprite.js";
 
 type Pair = readonly [number, number];
 interface SceneText {
@@ -26,6 +27,7 @@ interface SceneNode {
   opacity?: number;
   children: readonly SceneNode[];
   image?: {
+    enabled?: boolean;
     asset: string;
     color: readonly number[];
     mode: number;
@@ -35,7 +37,7 @@ interface SceneNode {
     size: Pair;
   };
   text?: SceneText;
-  gradient?: { angle: number; keys: Record<string, unknown> };
+  gradient?: SceneGradient;
   layout?: {
     axis: "x" | "y";
     padding: readonly number[];
@@ -81,37 +83,17 @@ export async function loadHaneokaScenes(document: Document): Promise<HaneokaScen
   }
   return promise;
 }
-function gradient(value: NonNullable<SceneNode["gradient"]>): string {
-  const keys = value.keys;
-  const colors = Array.from({ length: Number(keys.m_NumColorKeys) }, (_, i) => ({
-    time: Number(keys[`ctime${i}`]) / 65535,
-    color: keys[`key${i}`] as Record<string, number>,
-  }));
-  const alphas = Array.from({ length: Number(keys.m_NumAlphaKeys) }, (_, i) => ({
-    time: Number(keys[`atime${i}`]) / 65535,
-    alpha: (keys[`key${i}`] as Record<string, number>).a!,
-  }));
-  const times = [...new Set([...colors, ...alphas].map((k) => k.time))].sort((a, b) => a - b);
-  const interpolate = <T extends { time: number }>(
-    list: readonly T[],
-    time: number,
-    read: (key: T) => number,
-  ): number => {
-    const next = list.findIndex((k) => k.time >= time);
-    if (next <= 0) return read(next === 0 ? list[0]! : list[list.length - 1]!);
-    const a = list[next - 1]!,
-      b = list[next]!,
-      p = (time - a.time) / (b.time - a.time);
-    return read(a) + (read(b) - read(a)) * p;
-  };
-  return `linear-gradient(${90 - value.angle}deg,${times.map((time) => `${color([...["r", "g", "b"].map((key) => interpolate(colors, time, (k) => k.color[key]!)), interpolate(alphas, time, (k) => k.alpha)])} ${time * 100}%`).join(",")})`;
-}
 const tinted = new Map<string, Promise<string>>();
-function spriteUrl(document: Document, image: NonNullable<SceneNode["image"]>): Promise<string> {
+function spriteUrl(
+  document: Document,
+  image: NonNullable<SceneNode["image"]>,
+  gradient?: SceneGradient,
+  size?: Pair,
+): Promise<string> {
   const url = HANEOKA_UI_SPRITES[image.asset];
   if (!url) return Promise.reject(new Error(`Unknown UI sprite: ${image.asset}`));
-  if (image.color.slice(0, 3).every((c) => Math.abs(c - 1) < 0.00001)) return Promise.resolve(url);
-  const key = JSON.stringify([url, image.color.slice(0, 3)]);
+  if (!gradient && image.color.slice(0, 3).every((c) => Math.abs(c - 1) < 0.00001)) return Promise.resolve(url);
+  const key = JSON.stringify([url, image.color, gradient, size, image.mode, image.border, image.fillCenter]);
   let promise = tinted.get(key);
   if (promise) return promise;
   promise = new Promise<string>((resolve, reject) => {
@@ -125,6 +107,14 @@ function spriteUrl(document: Document, image: NonNullable<SceneNode["image"]>): 
         if (!context) throw new Error("Canvas is unavailable");
         context.drawImage(img, 0, 0);
         const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+        if (gradient && size) {
+          const composed = composeGradientSprite(context, pixels, image, size, gradient);
+          canvas.width = composed.width;
+          canvas.height = composed.height;
+          context.putImageData(composed, 0, 0);
+          resolve(canvas.toDataURL());
+          return;
+        }
         for (let i = 0; i < pixels.data.length; i += 4)
           for (let c = 0; c < 3; c++) pixels.data[i + c] = Math.round(pixels.data[i + c]! * image.color[c]!);
         context.putImageData(pixels, 0, 0);
@@ -213,13 +203,16 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
       style.alignItems = layout.axis === "x" ? vertical : horizontal;
       style.justifyContent = layout.axis === "x" ? horizontal : vertical;
     }
-    if (definition.image) {
+    const imageEnabled = definition.image?.enabled !== false;
+    const gradientEnabled = imageEnabled && definition.gradient?.enabled !== false && !!definition.gradient;
+    if (definition.image && imageEnabled) {
       const image = definition.image;
       style.opacity = String(image.color[3]);
-      void spriteUrl(document, image)
+      const spriteGradient = gradientEnabled && size[0] > 0 && size[1] > 0 ? definition.gradient : undefined;
+      void spriteUrl(document, image, spriteGradient, spriteGradient ? size : undefined)
         .then((url) => {
-          if (disposed || definition.gradient) return;
-          if (image.mode === 1 && image.border.some((n) => n > 0)) {
+          if (disposed || (gradientEnabled && !spriteGradient)) return;
+          if (!spriteGradient && image.mode === 1 && image.border.some((n) => n > 0)) {
             style.borderStyle = "solid";
             style.borderColor = "transparent";
             style.borderWidth = image.border.map(pixel).join(" ");
@@ -228,7 +221,7 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
             style.borderImageWidth = "1";
           } else {
             style.backgroundImage = `url(${JSON.stringify(url)})`;
-            style.backgroundSize = image.preserveAspect ? "contain" : "100% 100%";
+            style.backgroundSize = !spriteGradient && image.preserveAspect ? "contain" : "100% 100%";
             style.backgroundPosition = "center";
             style.backgroundRepeat = "no-repeat";
           }
@@ -237,8 +230,9 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
           element.dataset.resourceError = String(error);
         });
     }
-    if (definition.gradient) {
-      style.backgroundImage = gradient(definition.gradient);
+    // UIGradientImage modifies its Graphic; it cannot draw a disabled Image.
+    if (definition.gradient && gradientEnabled) {
+      if (size[0] <= 0 || size[1] <= 0) style.backgroundImage = gradientCss(definition.gradient);
       style.opacity = "1";
     }
     if (definition.text) {

@@ -1,3 +1,12 @@
+/** Formal episode ADV text 11001; display only, independent of target parsing. */
+export const HANEOKA_DISPLAY_NAME_JOINER = Object.freeze({
+  ja: "・",
+  en: " & ",
+  "zh-TW": " & ",
+  "zh-CN": " & ",
+  ko: "・",
+});
+
 export const HANEOKA_CONTROL_LABELS = {
   en: [
     "Menu",

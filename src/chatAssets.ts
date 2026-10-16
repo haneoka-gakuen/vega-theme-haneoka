@@ -162,6 +162,7 @@ export function bundledHaneokaChatSource(path: string): string {
 }
 
 export interface HaneokaChatSkin {
+  readonly sourceProfile?: HaneokaChatSourceProfile;
   readonly dataRoot: string;
   readonly rect: {
     readonly width: number;
@@ -286,6 +287,27 @@ export const HANEOKA_CHAT_SKINS: Readonly<Record<string, HaneokaChatSkin>> = Obj
 });
 
 export function haneokaChatSkin(windowAsset = "", dataRoot = ""): HaneokaChatSkin | undefined {
+  const profile = haneokaChatSourceProfile(windowAsset, dataRoot);
+  if (profile) {
+    const overlay = haneokaChatSourceRect(profile, "overlay")!,
+      mask = haneokaChatSourceRect(profile, "mask")!;
+    return {
+      sourceProfile: profile,
+      dataRoot: profile.dataRoot,
+      group: profile.group,
+      window: profile.roles.overlay?.image?.source ?? "",
+      background: profile.roles.background?.image?.source ?? null,
+      lock: profile.roles.lockBackground?.image?.source ?? null,
+      rect: {
+        width: overlay[2],
+        height: overlay[3],
+        maskWidth: mask[2],
+        maskHeight: mask[3],
+        maskTop: mask[1],
+        maskOffsetX: mask[0] + mask[2] / 2 - profile.rootSize[0] / 2,
+      },
+    };
+  }
   const named =
     HANEOKA_CHAT_SKINS[
       windowAsset
@@ -297,3 +319,8 @@ export function haneokaChatSkin(windowAsset = "", dataRoot = ""): HaneokaChatSki
   const normalized = dataRoot.replace(/\/+$/u, "").replace(/\/ChatLINE$/u, "");
   return Object.values(HANEOKA_CHAT_SKINS).find((skin) => skin.dataRoot === normalized);
 }
+import {
+  haneokaChatSourceProfile,
+  haneokaChatSourceRect,
+  type HaneokaChatSourceProfile,
+} from "@haneoka/vega-plugin-haneoka/chat-profile";

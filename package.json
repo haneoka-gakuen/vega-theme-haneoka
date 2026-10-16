@@ -38,7 +38,12 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./display-name-joiner": {
+      "types": "./dist/controlLabels.d.ts",
+      "import": "./dist/controlLabels.js",
+      "default": "./dist/controlLabels.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -53,7 +58,8 @@
     "@haneoka/vega": "^0.1.0"
   },
   "dependencies": {
-    "@haneoka/vega-plugin-richtext": "^0.1.0"
+    "@haneoka/vega-plugin-richtext": "^0.1.0",
+    "@haneoka/vega-plugin-haneoka": "^0.1.0"
   },
   "devDependencies": {
     "@haneoka/vega": "workspace:*",

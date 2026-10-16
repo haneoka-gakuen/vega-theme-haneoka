@@ -1,5 +1,7 @@
+import type { VegaWebUiSlotContext as VegaUiSlotContext } from "@haneoka/vega/web/ui";
 import { createHaneokaSdfBinding } from "./typography.js";
 import { applyPhoneTextProfile } from "./phoneText.js";
+import { resolveHaneokaChatImage } from "./chatImages.js";
 import { bindPhoneScroll } from "./phoneScroll.js";
 import { VEGA_SHELL_CONTROLLER } from "@haneoka/vega/shell";
 import { HANEOKA_UI_TEXT, haneokaUiLocale } from "./locale.js";
@@ -7,14 +9,12 @@ import {
   ADV_CHAT_WINDOW_TRANSITION,
   advChatWindowTransitionSeconds,
   chatDefaultDataRoot,
-  chatIconImagePath,
   chatWindowSpriteRectForDataRoot,
   createAdvTextRenderValue,
   evaluateAdvChatOutCubic,
   evaluateAdvChatOutExpo,
-  isAdvChatIconAssetName,
   type VegaDisposable,
-  type VegaUiSlotContext,
+  type StoryResourcePreparationContext,
 } from "@haneoka/vega/plugin";
 import { VEGA_RICH_TEXT_SERVICE, bindWebTextSelection } from "@haneoka/vega-plugin-richtext";
 import { usesWebText } from "./webText.js";
@@ -27,6 +27,11 @@ import {
   type HaneokaThemeAssets,
 } from "./host.js";
 import { HANEOKA_CHAT_DATA_ROOT, HANEOKA_CHAT_ICONS, haneokaChatSkin } from "./chatAssets.js";
+import {
+  haneokaChatSourceImageBorders,
+  haneokaChatSourceMaskBorders,
+  haneokaChatSourceMaskSlices,
+} from "@haneoka/vega-plugin-haneoka/chat-profile";
 import { createHaneokaRichTextPresenter, type HaneokaRichTextPresenter } from "./rich-text.js";
 
 type AdvPlayerState = VegaUiSlotContext["state"];
@@ -132,16 +137,20 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
     textSelection.requestAdvance(event, () => {
       const state = context.state;
       if (state.chat.visible && !state.seeking && !state.loading && !state.error && !state.choices.visible)
-        context.player.requestNext();
+        context.actions.dispatch({ type: "advance" });
     });
   };
   phone.frame.addEventListener("click", advance, { signal: events.signal });
   // The phone overlay owns only its otherwise empty stage area. Frame taps
   // already stop propagation; scroll gestures and higher-layer controls keep
   // their existing owners, so a click advances at most once.
-  phone.root.addEventListener("click", (event) => {
-    if (event.target === phone.root) advance(event);
-  }, { signal: events.signal });
+  phone.root.addEventListener(
+    "click",
+    (event) => {
+      if (event.target === phone.root) advance(event);
+    },
+    { signal: events.signal },
+  );
   phone.frame.addEventListener(
     "keydown",
     (event) => {
@@ -160,7 +169,8 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
     if (!state.chat.visible && !lifecycle.sourceVisible && !lifecycle.window) return;
     const assets = assetProvider?.assets?.(),
       assetKey = storyAssetKey(state, context, assets),
-      messages = `${state.chat.visible ? chatMessagesKey(state.chat.messages) : ""}\u0002${assetKey}`,
+      readPresentation = chatReadPresentation(state, context),
+      messages = `${state.chat.visible ? chatMessagesKey(state.chat.messages) : ""}\u0002${assetKey}\u0003${readPresentation.signature}`,
       signature = `${chatKey(state)}\u0002${messages}`;
     if (state.chat.visible && (immediate || signature !== lastChat)) {
       chatScroll.beforeUpdate();
@@ -173,6 +183,7 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
         context,
         assetProvider,
         richText,
+        readPresentation,
         immediate || messages !== lastMessages,
         immediate,
         assetKey,
@@ -193,7 +204,7 @@ export const mountHaneokaPhone = (host: HTMLElement, context: VegaUiSlotContext)
     phone.root.dataset.group = String(Boolean(state.chat.group));
     if (lastAssets !== assetKey) {
       lastAssets = assetKey;
-      applyStoryAssets(context.root, state, context, assetProvider, assets);
+      applyStoryAssets(context.root, phone.root, state, context, assetProvider, assets);
     }
   };
   const shell = context.services(VEGA_SHELL_CONTROLLER);
@@ -473,6 +484,7 @@ const renderPhone = (
   context: VegaUiSlotContext,
   themeHost: HaneokaThemeAssetProvider | undefined,
   richText: HaneokaRichTextPresenter,
+  readPresentation: ReturnType<typeof chatReadPresentation>,
   messagesChanged: boolean,
   immediate = false,
   assetKey = "",
@@ -489,6 +501,11 @@ const renderPhone = (
   setLanguage(phone.typing, state.chat.typingLang);
   richText.render(phone.typing, state.chat.typing, immediate);
   setLanguage(phone.incomingName, state.chat.titleLang);
+  applyPhoneTextProfile(
+    phone.incomingName,
+    "incomingName",
+    chatSourceProfile(state, context)?.roles.incomingName?.text,
+  );
   richText.render(phone.incomingName, state.chat.title || "CHAT", immediate);
   if (!messagesChanged) return;
   const mode = phoneMode(state.chat.screenMode);
@@ -502,6 +519,7 @@ const renderPhone = (
     context,
     themeHost,
     richText,
+    readPresentation,
     immediate,
     assetKey,
   );
@@ -517,6 +535,7 @@ const renderPhoneMessages = (
   context: VegaUiSlotContext,
   themeHost: HaneokaThemeAssetProvider | undefined,
   richText: HaneokaRichTextPresenter,
+  readPresentation: ReturnType<typeof chatReadPresentation>,
   immediate = false,
   assetKey = "",
 ): void => {
@@ -524,17 +543,42 @@ const renderPhoneMessages = (
   const next = new Map<string, { element: HTMLElement; signature: string }>();
   const occurrences = new Map<string, number>();
   const lock = !!host.closest(".haneoka-phone__lock-messages");
+  const updateReadCaption = (row: HTMLElement, message: AdvChatMessage) => {
+    let read = row.querySelector<HTMLElement>(".haneoka-phone__read");
+    if (!message.self || !(Number(message.readCount || 0) > 0) || !readPresentation.show) {
+      if (read) {
+        richText.releaseWithin(read);
+        read.remove();
+      }
+      return;
+    }
+    if (!read) {
+      read = node(document, "span", "haneoka-phone__read");
+      applyPhoneTextProfile(read, "read");
+      row.prepend(read);
+    }
+    setLanguage(read, readPresentation.caption.lang);
+    const caption = readPresentation.group
+      ? [readPresentation.caption.text, String(message.readCount)].filter(Boolean).join(" ")
+      : readPresentation.caption.text || String(message.readCount);
+    richText.render(read, caption, immediate);
+  };
   for (const message of messages) {
     const ordinal = occurrences.get(message.id) ?? 0;
     occurrences.set(message.id, ordinal + 1);
     const key = JSON.stringify([message.id, ordinal]);
-    const signature = `${assetKey}\u0002${chatMessagesKey([message])}`;
+    // Read state changes only the adjacent label. Preserve the message's
+    // existing text DOM, including a browser translation of unchanged text.
+    const { readCount: _readCount, ...contentMessage } = message;
+    const signature = `${assetKey}\u0002${readPresentation.showIdentity}\u0002${chatMessagesKey([contentMessage])}`;
     const existing = previous.get(key);
     if (existing?.signature === signature) {
       const existingName = existing.element.querySelector<HTMLElement>(".haneoka-phone__message-name");
       const existingText = existing.element.querySelector<HTMLElement>(".haneoka-phone__message-text");
       if (existingName) setLanguage(existingName, message.speakerLang);
       if (existingText) setLanguage(existingText, message.textLang);
+      const row = existing.element.querySelector<HTMLElement>(".haneoka-phone__message-row");
+      if (row) updateReadCaption(row, message);
       next.set(key, existing);
       continue;
     }
@@ -544,7 +588,7 @@ const renderPhoneMessages = (
     item.dataset.self = String(Boolean(message.self));
     item.dataset.stamp = String(Boolean(message.stamp));
 
-    if (!message.self) {
+    if (!message.self && readPresentation.showIdentity) {
       const avatar = node(document, "span", "haneoka-phone__avatar");
       const source = resolveChatImage(themeHost, state, context, message.icon || message.iconAssetName, "icon");
       if (source) {
@@ -558,7 +602,7 @@ const renderPhoneMessages = (
 
     const content = node(document, "div", "haneoka-phone__message-content");
     let name: HTMLElement | undefined;
-    if (message.speaker && !message.self) {
+    if (message.speaker && !message.self && readPresentation.showIdentity) {
       name = node(document, "b", "haneoka-phone__message-name");
       applyPhoneTextProfile(name, "speaker");
       setLanguage(name, message.speakerLang);
@@ -566,13 +610,7 @@ const renderPhoneMessages = (
       if (!lock || message.stamp) content.append(name);
     }
     const row = node(document, "div", "haneoka-phone__message-row");
-    if (message.self && Number(message.readCount || 0) > 0) {
-      const read = node(document, "span", "haneoka-phone__read");
-      applyPhoneTextProfile(read, "read");
-      setLanguage(read, "");
-      richText.render(read, "既読", immediate);
-      row.append(read);
-    }
+    updateReadCaption(row, message);
     if (message.stamp) {
       const source = resolveChatImage(themeHost, state, context, message.stamp, "stamp");
       if (source) {
@@ -620,41 +658,7 @@ const resolveChatImage = (
   value: unknown,
   kind: "icon" | "stamp",
 ): string => {
-  const source = String(value ?? "").trim();
-  if (!source) return "";
-  let resolved = themeHost?.resolveChatImage?.(source, kind) ?? "";
-  if (!resolved && /^(?:data:|blob:|https?:\/\/|\/)/iu.test(source)) {
-    resolved = source;
-  }
-  if (!resolved) {
-    const resolveSource = (path: string): string => resolveHaneokaSourceAsset(themeHost, path);
-    if (kind === "icon" && isAdvChatIconAssetName(source)) {
-      const mapped = chatIconImagePath(source, context.player.runtime);
-      if (mapped) {
-        // The runtime map yields a server-absolute /assets/... URL; pass it
-        // through directly instead of routing it through the host resolver.
-        resolved = mapped;
-      }
-      if (!resolved) {
-        // No runtime mapping: try the canonical Chat/Icon/ path
-        resolved = resolveSource(`Assets/AddressableResources/Adv/Chat/Icon/${source.replace(/\.png$/u, "")}.png`);
-      }
-    }
-    if (!resolved) {
-      const file = source.endsWith(".png") ? source : `${source}.png`;
-      const activeRoot = state.chat.dataRoot || chatDefaultDataRoot(context.player.runtime) || HANEOKA_CHAT_DATA_ROOT;
-      const defaultRoot = chatDefaultDataRoot(context.player.runtime) || HANEOKA_CHAT_DATA_ROOT;
-      const lineRoot = chatLineDataRoot(defaultRoot);
-      const path = source.includes("/")
-        ? file
-        : /^ADVChat/iu.test(source)
-          ? `${lineRoot}/${file}`
-          : /^(?:Icon|stamp)/iu.test(source)
-            ? `${defaultRoot}/${file}`
-            : `${activeRoot}/${file}`;
-      resolved = resolveSource(path);
-    }
-  }
+  let resolved = resolveHaneokaChatImage(themeHost, context.player.runtime, value, kind, state.chat.dataRoot);
   if (!resolved) return "";
   resolved = preparedImage(context, resolved) ?? resolved;
   try {
@@ -752,6 +756,34 @@ const chatKey = (state: AdvPlayerState): string =>
       ].join("\u0001")
     : "";
 
+const chatSourceProfile = (state: AdvPlayerState, context: VegaUiSlotContext) =>
+  haneokaChatSkin(
+    state.chat.windowAssetName,
+    state.chat.dataRoot || chatDefaultDataRoot(context.player.runtime) || HANEOKA_CHAT_DATA_ROOT,
+  )?.sourceProfile;
+
+function chatReadPresentation(state: AdvPlayerState, context: VegaUiSlotContext) {
+  const assets = context.player.runtime.chatAssets as
+    (NonNullable<typeof context.player.runtime.chatAssets> & { readonly readText?: unknown }) | undefined;
+  const caption =
+    assets?.readText === undefined
+      ? { text: "既読", lang: "ja" }
+      : context.player.resolveLocalizedText(assets.readText);
+  const master = assets?.masters?.[String(state.chat.chatId)] as { readonly layoutMode?: unknown } | undefined;
+  const layoutMode = Number(master?.layoutMode ?? 0);
+  const profile = chatSourceProfile(state, context);
+  const group = profile?.group ?? Boolean(state.chat.group);
+  const show = profile?.visibility.read ?? layoutMode !== 1;
+  const showIdentity = profile?.visibility.identity ?? true;
+  return {
+    caption,
+    group,
+    show,
+    showIdentity,
+    signature: JSON.stringify([caption.text, caption.lang, group, show, showIdentity]),
+  };
+}
+
 const chatMessagesKey = (messages: readonly AdvChatMessage[]): string =>
   messages
     .map(({ id, speaker, speakerLang, text, textLang, stamp, icon, iconAssetName, self, readCount }) =>
@@ -800,6 +832,35 @@ const CHAT_ICON_PROPERTIES: Readonly<Record<string, string>> = Object.freeze({
 });
 
 const CHAT_LAYOUT_PROPERTIES = Object.freeze([
+  "--haneoka-chat-root-width-height",
+  "--haneoka-chat-root-aspect",
+  "--haneoka-chat-background-color",
+  "--haneoka-chat-top-color",
+  "--haneoka-chat-title-color",
+  "--haneoka-chat-chrome-color",
+  "--haneoka-chat-message-color",
+  "--haneoka-chat-speaker-color",
+  "--haneoka-chat-my-bubble-color",
+  "--haneoka-chat-other-bubble-color",
+  "--haneoka-chat-read-color",
+  "--haneoka-chat-mask-image",
+  "--haneoka-chat-mask-border",
+  "--haneoka-chat-mask-slices",
+  "--haneoka-chat-mask-radius",
+  "--haneoka-chat-mask-edge",
+  "--haneoka-chat-mask-source-size",
+  "--haneoka-chat-bubble-edge",
+  "--haneoka-chat-bubble-source-size",
+  "--haneoka-chat-mask-corners",
+  "--haneoka-chat-text-box-corners",
+  "--haneoka-chat-icon-color",
+  "--haneoka-chat-battery-color",
+  "--haneoka-chat-battery-text-color",
+  "--haneoka-chat-typing-color",
+  "--haneoka-chat-incoming-name-color",
+  "--haneoka-chat-incoming-label-color",
+  "--haneoka-chat-lock-color",
+  "--haneoka-chat-lock-brightness",
   "--haneoka-chat-overlay-width",
   "--haneoka-chat-overlay-height",
   "--haneoka-chat-mask-top",
@@ -827,6 +888,7 @@ const captureStoryAssetProperties = (root: HTMLElement): (() => void) => {
 
 const applyStoryAssets = (
   root: HTMLElement,
+  phone: HTMLElement,
   state: AdvPlayerState,
   context: VegaUiSlotContext,
   themeHost: HaneokaThemeAssetProvider | undefined,
@@ -849,7 +911,8 @@ const applyStoryAssets = (
     chatBackground: usesChat
       ? resolveSource(skin ? (skin.background ?? "") : sourcePath(dataRoot, "back.png"))
       : undefined,
-    chatBackgroundFallback: usesChat ? resolveSource(sourcePath(defaultRoot, "back.png")) : undefined,
+    chatBackgroundFallback:
+      usesChat && !skin?.sourceProfile ? resolveSource(sourcePath(defaultRoot, "back.png")) : undefined,
     chatLock: mode === "lock" ? resolveSource(skin ? (skin.lock ?? "") : sourcePath(dataRoot, "lock.png")) : undefined,
     chatTextBox: usesMessages ? resolveSource(sourcePath(commonSpritesRoot, "default_text_box.png")) : undefined,
     chatComposerPlus: usesChat ? resolveSource(sourcePath(lineRoot, "ADVChatIconLine_Plus.png")) : undefined,
@@ -866,7 +929,19 @@ const applyStoryAssets = (
       (key === "chatLock" && mode === "lock") ||
       (key === "chatTextBox" && usesMessages) ||
       (key !== "chatLock" && key !== "chatTextBox" && usesChat);
-    setCssImage(root, property, required ? preparedImage(context, assets?.[key] ?? derived[key]) : undefined);
+    const image = required ? preparedImage(context, assets?.[key] ?? derived[key]) : undefined;
+    if (key === "chatTextBox")
+      phone.toggleAttribute(
+        "data-text-box-mask-ready",
+        applySourceMaskCorners(root, "--haneoka-chat-text-box-corners", context, assets?.[key] ?? derived[key]),
+      );
+    if (
+      skin?.sourceProfile &&
+      !image &&
+      (key === "chatBackground" || key === "chatBackgroundFallback" || key === "chatLock")
+    ) {
+      root.style.setProperty(property, "none");
+    } else setCssImage(root, property, image);
   }
   const chatIcons = {
     ...HANEOKA_CHAT_ICONS,
@@ -900,6 +975,97 @@ const applyStoryAssets = (
   root.style.setProperty("--haneoka-chat-mask-height", `${maskHeight}%`);
   root.style.setProperty("--haneoka-chat-incoming-root-width-height", `${incomingRootWidthHeight}cqh`);
   root.style.setProperty("--haneoka-chat-incoming-root-width-width", `${incomingRootWidthWidth}cqw`);
+  const profile = skin?.sourceProfile;
+  const colour = (value: readonly number[] | undefined): string | undefined =>
+    value
+      ? `rgba(${value
+          .slice(0, 3)
+          .map((v) => Math.round(v * 255))
+          .join(",")},${value[3] ?? 1})`
+      : undefined;
+  const colours = {
+    background: profile?.roles.background?.image?.color,
+    top: profile?.roles.top?.image?.color,
+    title: profile?.roles.title?.text?.color,
+    chrome: profile?.roles.title?.text?.color,
+    icon: profile?.roles.signal?.image?.color,
+    battery: profile?.roles.batteryFill?.image?.color,
+    "battery-text": profile?.roles.batteryText?.text?.color,
+    typing: profile?.roles.typingText?.text?.color,
+    "incoming-name": profile?.roles.incomingName?.text?.color,
+    "incoming-label": profile?.roles.incomingLabel?.text?.color,
+    lock: profile?.roles.lockLabel?.text?.color,
+    message: profile?.roles.otherText?.text?.color,
+    speaker: profile?.roles.otherName?.text?.color,
+    "my-bubble": profile?.roles.myBubble?.image?.color,
+    "other-bubble": profile?.roles.otherBubble?.image?.color,
+    read: profile?.roles.myRead?.text?.color,
+  };
+  for (const [role, value] of Object.entries(colours)) {
+    const property = `--haneoka-chat-${role}-color`,
+      css = colour(value);
+    if (css) root.style.setProperty(property, css);
+    else root.style.removeProperty(property);
+  }
+  const lockTint = profile?.roles.lockBackground?.image?.color;
+  if (lockTint) root.style.setProperty("--haneoka-chat-lock-brightness", String(lockTint[0]));
+  else root.style.removeProperty("--haneoka-chat-lock-brightness");
+  if (profile) {
+    root.style.setProperty(
+      "--haneoka-chat-root-width-height",
+      `${(profile.rootSize[0] / profile.rootSize[1]) * 100}cqh`,
+    );
+    root.style.setProperty("--haneoka-chat-root-aspect", `${profile.rootSize[0]} / ${profile.rootSize[1]}`);
+    const maskSource = profile.roles.mask?.image?.source;
+    const resolvedMask = maskSource ? resolveSource(maskSource) : undefined;
+    setCssImage(root, "--haneoka-chat-mask-image", resolvedMask ? preparedImage(context, resolvedMask) : undefined);
+    phone.toggleAttribute(
+      "data-screen-mask-ready",
+      applySourceMaskCorners(root, "--haneoka-chat-mask-corners", context, resolvedMask),
+    );
+    const border = haneokaChatSourceMaskBorders(profile);
+    if (border)
+      root.style.setProperty(
+        "--haneoka-chat-mask-border",
+        border.map((v) => `${(v / profile.rootSize[1]) * 100}cqh`).join(" "),
+      );
+    const slices = haneokaChatSourceMaskSlices(profile);
+    if (slices) root.style.setProperty("--haneoka-chat-mask-slices", slices.join(" "));
+    // Source's opaque center band lets the 63-pixel slice extend to 69 pixels.
+    // This overlap covers compositor edge sampling at small phone sizes.
+    for (const [part, role] of [
+      ["mask", "mask"],
+      ["bubble", "otherBubble"],
+    ] as const) {
+      const borders = haneokaChatSourceImageBorders(profile, role),
+        sprite = profile.roles[role]?.image?.sprite;
+      if (borders && sprite) {
+        const edge = borders[3]!;
+        root.style.setProperty(`--haneoka-chat-${part}-edge`, `${(edge / profile.rootSize[1]) * 100}cqh`);
+        root.style.setProperty(
+          `--haneoka-chat-${part}-source-size`,
+          `${((edge * sprite.rect.width * CHAT_MASK_CORNER_SIZE) / CHAT_MASK_SOURCE_SIZE / sprite.border.x / profile.rootSize[1]) * 100}cqh`,
+        );
+      }
+    }
+    root.style.setProperty("--haneoka-chat-mask-radius", "0px");
+  } else {
+    phone.removeAttribute("data-screen-mask-ready");
+    for (const property of [
+      "--haneoka-chat-root-width-height",
+      "--haneoka-chat-root-aspect",
+      "--haneoka-chat-mask-image",
+      "--haneoka-chat-mask-border",
+      "--haneoka-chat-mask-slices",
+      "--haneoka-chat-mask-radius",
+      "--haneoka-chat-mask-edge",
+      "--haneoka-chat-mask-source-size",
+      "--haneoka-chat-bubble-edge",
+      "--haneoka-chat-bubble-source-size",
+      "--haneoka-chat-mask-corners",
+    ])
+      root.style.removeProperty(property);
+  }
 };
 
 const storyAssetKey = (
@@ -924,6 +1090,55 @@ const storyAssetKey = (
 };
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+
+const sourceMaskCorners = new WeakMap<object, Map<string, readonly string[]>>();
+const CHAT_MASK_SOURCE_SIZE = 128;
+const CHAT_MASK_CORNER_SIZE = 69;
+
+export async function prepareHaneokaPhoneMasks(
+  context: StoryResourcePreparationContext,
+  sources: readonly string[],
+): Promise<void> {
+  const document = context.document;
+  if (!document) return;
+  const cache = sourceMaskCorners.get(context.resources) ?? new Map<string, readonly string[]>();
+  sourceMaskCorners.set(context.resources, cache);
+  await Promise.all(
+    [...new Set(sources)].map(async (source) => {
+      if (cache.has(source)) return;
+      const bytes = await context.resources.load(source, context.signal);
+      const png = `data:image/png;base64,${btoa(Array.from(bytes, (value) => String.fromCharCode(value)).join(""))}`;
+      const corners = Array.from({ length: 4 }, (_, index) => {
+        const start = CHAT_MASK_SOURCE_SIZE - CHAT_MASK_CORNER_SIZE;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${(index % 2) * start} ${Math.floor(index / 2) * start} ${CHAT_MASK_CORNER_SIZE} ${CHAT_MASK_CORNER_SIZE}"><image href="${png}" width="${CHAT_MASK_SOURCE_SIZE}" height="${CHAT_MASK_SOURCE_SIZE}"/></svg>`;
+        return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      });
+      await Promise.all(
+        corners.map(async (source) => {
+          const image = document.createElement("img");
+          image.src = source;
+          await image.decode();
+        }),
+      );
+      cache.set(source, corners);
+    }),
+  );
+}
+
+const applySourceMaskCorners = (
+  root: HTMLElement,
+  property: string,
+  context: VegaUiSlotContext,
+  source: string | undefined,
+): boolean => {
+  const corners = source && context.resources ? sourceMaskCorners.get(context.resources)?.get(source) : undefined;
+  if (corners) {
+    root.style.setProperty(property, corners.map((value) => `url("${value}")`).join(","));
+    return true;
+  }
+  root.style.removeProperty(property);
+  return false;
+};
 
 const preparedImage = (context: VegaUiSlotContext, source: string | undefined): string | undefined => {
   if (!source) return source;

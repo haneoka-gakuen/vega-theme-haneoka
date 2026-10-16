@@ -829,8 +829,10 @@ export function createHaneokaSdfBinding(
     if (disposed || lifetime.signal.aborted || !element.isConnected || !element.getClientRects().length) return false;
     if (usesWebText(element) || !bank.shader) return false;
     entry.accessible = contentElement(element);
-    if (!entry.accessible.hasAttribute("data-haneoka-rich-text-owned"))
-      entry.accessible.textContent = visibleSourceText(entry.source);
+    if (!entry.accessible.hasAttribute("data-haneoka-rich-text-owned")) {
+      const text = visibleSourceText(entry.source);
+      if (entry.accessible.textContent !== text) entry.accessible.textContent = text;
+    }
     const style = document.defaultView?.getComputedStyle(element);
     if (!style || style.direction === "rtl") return false;
     const profile = element.dataset.textProfile
@@ -843,6 +845,8 @@ export function createHaneokaSdfBinding(
           material: string;
           characterSpacing: number;
           lineSpacing: number;
+          wrappingMode?: number;
+          overflowMode?: number;
         })
       : undefined;
     let fontSize = parseFloat(style.fontSize) || 16;
@@ -904,10 +908,15 @@ export function createHaneokaSdfBinding(
           `${(f._UnderlayOffsetX ?? 0) * underlayScale}px ${-(f._UnderlayOffsetY ?? 0) * underlayScale}px ${(f._UnderlaySoftness ?? 0) * underlayScale}px ${cssColor("_UnderlayColor")}`,
         );
       }
-      element.style.setProperty("--haneoka-dom-material-shadow", shadows.join(",") || "none");
+      const shadow = shadows.join(",") || "none";
+      if (element.style.getPropertyValue("--haneoka-dom-material-shadow") !== shadow)
+        element.style.setProperty("--haneoka-dom-material-shadow", shadow);
     }
     const paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
-    const nowrap = style.whiteSpace === "nowrap" || element.dataset.textAuto === "true";
+    const nowrap =
+      profile?.wrappingMode === undefined
+        ? style.whiteSpace === "nowrap" || element.dataset.textAuto === "true"
+        : profile.wrappingMode === 0 || profile.wrappingMode === 3;
     const messageRow = element.classList.contains("haneoka-phone__message-text")
       ? element.closest<HTMLElement>(".haneoka-phone__message")
       : null;
@@ -935,6 +944,8 @@ export function createHaneokaSdfBinding(
       resolvedMaterialName,
       lang,
       profile?.characterSpacing,
+      profile?.wrappingMode,
+      profile?.overflowMode,
       profile && element.closest(".haneoka-story-ui") ? nativeLineSpacing(lang) : profile?.lineSpacing,
     ]);
     if (entry.nativeFallbackFamily && entry.nativeFallbackSignature === entry.requestSignature) return false;
@@ -1004,6 +1015,8 @@ export function createHaneokaSdfBinding(
       profile?.minSize,
       profile?.maxSize,
       profile?.characterSpacing,
+      profile?.wrappingMode,
+      profile?.overflowMode,
       profile && element.closest(".haneoka-story-ui") ? nativeLineSpacing(lang) : profile?.lineSpacing,
       fonts.map((font) => font.id),
     ]);
@@ -1184,6 +1197,7 @@ export function createHaneokaSdfBinding(
             const element = record.target as HTMLElement;
             const entry = entries.get(element);
             if (!entry) continue;
+            if (record.contentRect.width <= 0 || record.contentRect.height <= 0) continue;
             entry.signature = "";
             if (entry.capacitySignature) {
               entry.capacitySignature = "";

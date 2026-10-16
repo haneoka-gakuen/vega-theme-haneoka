@@ -1,4 +1,5 @@
-import type { VegaUiSlotContext } from "@haneoka/vega/plugin";
+import type { VegaWebUiSlotContext as VegaUiSlotContext } from "@haneoka/vega/web/ui";
+
 
 export function bindHaneokaViewport(host: HTMLElement, context: VegaUiSlotContext) {
   const previous = host.style.cssText;

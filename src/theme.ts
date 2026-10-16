@@ -252,7 +252,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   display: grid;
   place-items: start center;
   overflow: clip;
-  color: #051233;
+  color: var(--haneoka-chat-chrome-color, #051233);
   text-shadow: none;
   pointer-events: auto;
 }
@@ -269,8 +269,8 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-phone__frame {
   position: relative;
   /* AdvChatView.AdjustWindowSize: view height / the 700-unit root. */
-  width: 102.857143cqh;
-  aspect-ratio: 36 / 35;
+  width: var(--haneoka-chat-root-width-height, 102.857143cqh);
+  aspect-ratio: var(--haneoka-chat-root-aspect, 36 / 35);
   overflow: visible;
   container-type: size;
   pointer-events: auto;
@@ -297,6 +297,9 @@ export const HANEOKA_THEME_CSS = String.raw`
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone__screen {
+  --haneoka-mask-corners: var(--haneoka-chat-mask-corners, none, none, none, none);
+  --haneoka-mask-edge: var(--haneoka-chat-mask-edge, 9cqh);
+  --haneoka-mask-source-size: var(--haneoka-chat-mask-source-size, calc(9cqh * 69 / 63));
   position: absolute;
   top: var(--haneoka-chat-mask-top, 4.285714%);
   left: calc(50% + var(--haneoka-chat-mask-offset-x, 0%));
@@ -304,12 +307,33 @@ export const HANEOKA_THEME_CSS = String.raw`
   height: var(--haneoka-chat-mask-height, 210.05875%);
   z-index: 1;
   overflow: clip;
-  border-radius: 9cqh;
+  border-radius: var(--haneoka-chat-mask-radius, 9cqh);
+  -webkit-mask-box-image: var(--haneoka-chat-mask-image, none) var(--haneoka-chat-mask-slices, 63) fill / var(--haneoka-chat-mask-border, 9cqh) / 0 stretch;
+  mask-border: var(--haneoka-chat-mask-image, none) var(--haneoka-chat-mask-slices, 63) fill / var(--haneoka-chat-mask-border, 9cqh) / 0 stretch;
   background:
-    var(--haneoka-chat-background-image) center / 109.676% 104.46% no-repeat,
-    var(--haneoka-chat-background-fallback-image) center / 109.676% 104.46% no-repeat,
-    #ececf1;
+    var(--haneoka-chat-background-image, none) center / 109.676% 104.46% no-repeat,
+    var(--haneoka-chat-background-fallback-image, none) center / 109.676% 104.46% no-repeat,
+    var(--haneoka-chat-background-color, #ececf1);
   transform: translateX(-50%);
+}
+
+[data-vega-theme="haneoka"] .haneoka-phone[data-screen-mask-ready] .haneoka-phone__screen,
+[data-vega-theme="haneoka"] .haneoka-phone[data-text-box-mask-ready] .haneoka-phone__bubble::before {
+  border-radius: 0;
+  -webkit-mask-box-image: none;
+  mask-border: none;
+  mask-image: var(--haneoka-mask-corners), linear-gradient(#fff, #fff), linear-gradient(#fff, #fff);
+  mask-size:
+    var(--haneoka-mask-source-size) var(--haneoka-mask-source-size),
+    var(--haneoka-mask-source-size) var(--haneoka-mask-source-size),
+    var(--haneoka-mask-source-size) var(--haneoka-mask-source-size),
+    var(--haneoka-mask-source-size) var(--haneoka-mask-source-size),
+    max(0px, calc(100% - var(--haneoka-mask-edge) * 2)) 100%,
+    100% max(0px, calc(100% - var(--haneoka-mask-edge) * 2));
+  mask-position: left top, right top, left bottom, right bottom, center, center;
+  mask-repeat: no-repeat;
+  -webkit-mask-composite: source-over;
+  mask-composite: add;
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone__top {
@@ -319,7 +343,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   left: 0;
   z-index: 6;
   height: 22.857143cqh;
-  background: #faecf4;
+  background: var(--haneoka-chat-top-color, #faecf4);
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone__status {
@@ -344,7 +368,7 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-phone__composer-action {
   display: block;
   flex: none;
-  background-color: #302629;
+  background-color: var(--haneoka-chat-icon-color, #302629);
   mask-position: center;
   mask-repeat: no-repeat;
   mask-size: contain;
@@ -396,7 +420,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   height: 7.142857cqh;
   align-items: center;
   justify-content: flex-end;
-  color: #051233;
+  color: var(--haneoka-chat-battery-text-color, #051233);
   font-size: 2.957143cqh;
   font-weight: 400;
   line-height: 1;
@@ -417,7 +441,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   position: absolute;
   inset: 0;
   display: block;
-  background: #302629;
+  background: var(--haneoka-chat-icon-color, #302629);
   mask: var(--haneoka-chat-icon-battery-frame-image) center / contain no-repeat;
   transform: rotate(-90deg);
   -webkit-mask: var(--haneoka-chat-icon-battery-frame-image) center / contain no-repeat;
@@ -437,7 +461,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   position: absolute;
   inset: 0 auto 0 0;
   width: var(--haneoka-chat-battery-level, 100%);
-  background: #9fe747;
+  background: var(--haneoka-chat-battery-color, #9fe747);
   content: "";
 }
 
@@ -459,7 +483,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   justify-content: center;
   margin: 0;
   overflow: hidden;
-  color: #051233;
+  color: var(--haneoka-chat-title-color, #051233);
   font-size: 4.928571cqh;
   font-weight: 700;
   line-height: 1;
@@ -578,7 +602,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   display: block;
   margin: 0;
   overflow: hidden;
-  color: #051233;
+  color: var(--haneoka-chat-speaker-color, #051233);
   font-size: 2.857143cqh;
   font-weight: 700;
   line-height: 4.571429cqh;
@@ -604,7 +628,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   box-sizing: border-box;
   padding: .781429cqh 4.285714cqh;
   background: transparent;
-  color: #051233;
+  color: var(--haneoka-chat-message-color, #051233);
   font-size: 3.428571cqh;
   isolation: isolate;
   line-height: 1.2;
@@ -632,25 +656,28 @@ export const HANEOKA_THEME_CSS = String.raw`
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone__bubble::before {
+  --haneoka-mask-corners: var(--haneoka-chat-text-box-corners, none, none, none, none);
+  --haneoka-mask-edge: var(--haneoka-chat-bubble-edge, 4.5cqh);
+  --haneoka-mask-source-size: var(--haneoka-chat-bubble-source-size, calc(4.5cqh * 69 / 63));
   position: absolute;
   inset: 0;
   z-index: -1;
   border-radius: 4.5cqh;
-  background: #fff;
+  background: var(--haneoka-chat-other-bubble-color, #fff);
   content: "";
   mask-border: var(--haneoka-chat-text-box-image) 63 fill / 4.5cqh / 0 stretch;
   -webkit-mask-box-image: var(--haneoka-chat-text-box-image) 63 fill / 4.5cqh / 0 stretch;
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone__message[data-self="true"] .haneoka-phone__bubble::before {
-  background: #d0feff;
+  background: var(--haneoka-chat-my-bubble-color, #d0feff);
 }
 
 [data-vega-theme="haneoka"] .haneoka-phone__read {
   flex: none;
   width: 9.142857cqh;
   padding-bottom: .4cqh;
-  color: #6a6d79;
+  color: var(--haneoka-chat-read-color, #6a6d79);
   font-size: 2.857143cqh;
   text-align: right;
 }
@@ -744,7 +771,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   min-height: 9cqh;
   align-items: center;
   overflow: visible;
-  color: #051233;
+  color: var(--haneoka-chat-typing-color, #051233);
   font-size: 3.428571cqh;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -782,7 +809,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   height: 104.46%;
   background: var(--haneoka-chat-lock-image, linear-gradient(#fff, #fff)) center / 100% 100% no-repeat;
   content: "";
-  filter: brightness(.273585);
+  filter: brightness(var(--haneoka-chat-lock-brightness, .273585));
   transform: translate(-50%, calc(-50% - 2.857143cqh));
 }
 
@@ -793,7 +820,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   z-index: 1;
   width: 71.428571cqh;
   height: 7.142857cqh;
-  color: #fff;
+  color: var(--haneoka-chat-lock-color, #fff);
   font-size: 5.714286cqh;
   font-weight: 700;
   line-height: 1;
@@ -824,6 +851,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   justify-content: center;
   margin: 0;
   overflow: hidden;
+  color: var(--haneoka-chat-incoming-name-color, #fff);
   font-size: 6.9cqh;
   font-weight: 700;
   line-height: 1;
@@ -842,6 +870,7 @@ export const HANEOKA_THEME_CSS = String.raw`
   align-items: center;
   justify-content: center;
   margin: 0;
+  color: var(--haneoka-chat-incoming-label-color, #fff);
   font-size: 4.285714cqh;
   font-weight: 700;
   line-height: 1;
@@ -865,6 +894,7 @@ export const HANEOKA_THEME_CSS = String.raw`
 [data-vega-theme="haneoka"] .haneoka-quickbar[data-open="true"]{opacity:1;visibility:visible;transform:none;pointer-events:auto}
 [data-vega-theme="haneoka"] .haneoka-quickbar>button{position:relative;flex:none;min-height:clamp(44px,8.2cqh,88px);width:100%;border:0;border-radius:4px;background:transparent;padding:2px 16px;text-align:left;font-size:clamp(12px,1.85cqh,17px);color:#edf3ff;cursor:pointer}
 [data-vega-theme="haneoka"] .haneoka-quickbar>button+button{border-top:1px solid #cadbff25}
+[data-vega-theme="haneoka"] .haneoka-quickbar>button[data-group-start="true"]{margin-top:6px;border-top:2px solid #cadbff50}
 [data-vega-theme="haneoka"] .haneoka-quickbar>button:hover,[data-vega-theme="haneoka"] .haneoka-quickbar>button[aria-pressed="true"]{color:#b5eee3;background:#abd1db1f}
 [data-vega-theme="haneoka"] .haneoka-controls :focus-visible{outline:2px solid #acdacf;outline-offset:3px}
 [data-vega-theme="haneoka"] .haneoka-control-toast{position:absolute;bottom:15cqh;left:50%;transform:translateX(-50%);max-width:75%;background:#17253bea;border:1px solid #91b9d560;border-radius:3px;padding:10px 20px;color:#fff;font-size:clamp(12px,2cqh,18px)}

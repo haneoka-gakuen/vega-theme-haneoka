@@ -27,6 +27,12 @@ jobs:
           repository: haneoka-gakuen/vega-plugin-richtext
           path: vega-theme-haneoka/.dependencies/vega-plugin-richtext
           persist-credentials: false
+      - name: Check out Haneoka profile plugin
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: haneoka-gakuen/vega-plugin-haneoka
+          path: vega-theme-haneoka/.dependencies/vega-plugin-haneoka
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         with:
           version: 11.14.0
@@ -39,12 +45,16 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: node scripts/verify-release-tag.mjs
+      - name: Set up locked Rust/WASM tools
+        uses: ./vega-theme-haneoka/.dependencies/vega/.github/actions/setup-wasm
       - working-directory: vega-theme-haneoka
         run: pnpm install --no-frozen-lockfile
       - working-directory: vega-theme-haneoka
         run: pnpm --filter @haneoka/vega-protocol build && pnpm --filter @haneoka/vega build:core
       - working-directory: vega-theme-haneoka
         run: pnpm --filter @haneoka/vega-plugin-richtext build
+      - working-directory: vega-theme-haneoka
+        run: pnpm --filter @haneoka/vega-plugin-haneoka build
       - working-directory: vega-theme-haneoka
         run: pnpm check
       - working-directory: vega-theme-haneoka
