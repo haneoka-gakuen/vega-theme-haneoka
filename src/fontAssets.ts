@@ -23,8 +23,6 @@ export const HANEOKA_SDF_ASSETS = {
     data: new URL("../assets/fonts/chinese.json", import.meta.url).href,
     atlases: [
       new URL("../assets/fonts/chinese-0.png", import.meta.url).href,
-      new URL("../assets/fonts/chinese-1.png", import.meta.url).href,
-      new URL("../assets/fonts/chinese-2.png", import.meta.url).href,
     ],
   },
   korean: {
