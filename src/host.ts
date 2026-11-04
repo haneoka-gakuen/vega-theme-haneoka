@@ -117,6 +117,7 @@ export interface HaneokaThemeHost extends HaneokaThemeAssetProvider {
 export const HANEOKA_THEME_HOST = defineVegaService<HaneokaThemeHost>("haneoka.theme-host.v1");
 
 export interface HaneokaStorySequenceControl {
+  readonly supportsContinuousPlay?: boolean;
   readonly continuous: boolean;
   toggleContinuous(): void;
   interrupt(): void;

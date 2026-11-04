@@ -140,6 +140,7 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
     try {
       const target = player.resolveSeekRatio(Number(slider.value));
       await player.seekTo(target, { resume: false });
+      if (!disposed && requested === revision) player.holdRestoredDialogue();
       return !disposed && requested === revision;
     } catch (error) {
       if (!disposed && requested === revision) {
@@ -202,7 +203,9 @@ export function mountHaneokaProgress(host: HTMLElement, context: VegaUiSlotConte
       loading.status !== "loading"
         ? ""
         : loading.totalTasks === undefined
-          ? loading.processedTasks ? String(loading.processedTasks) : ""
+          ? loading.processedTasks
+            ? String(loading.processedTasks)
+            : ""
           : `${loading.processedTasks} / ${loading.totalTasks}`;
     const nextPreparation = `${loading.status}|${preparationText}`;
     if (nextPreparation !== preparationSignature) {

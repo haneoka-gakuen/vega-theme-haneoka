@@ -26,7 +26,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
   const adapter = context.services(HANEOKA_THEME_HOST);
   const sequence = context.services(HANEOKA_STORY_SEQUENCE);
   // The host renders the transport itself; the in-game menu stays.
-  const progress = adapter?.externalPlaybackControls ? undefined : mountHaneokaProgress(host, context);
+  const externalPlaybackControls = adapter?.externalPlaybackControls || context.root.dataset.vegaExternalPlaybackControls === "true";
+  const progress = externalPlaybackControls ? undefined : mountHaneokaProgress(host, context);
   const document = host.ownerDocument,
     root = document.createElement("nav");
   root.className = "haneoka-controls";
@@ -125,7 +126,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     ...(progress || adapter?.setPlaybackControlsVisible
       ? ([
           [
-            "progress", () => {
+            "progress",
+            () => {
               const visible = adapter?.externalPlaybackControls
                 ? (adapter.snapshot().playbackControlsVisible ?? false)
                 : (progress?.visible ?? false);
@@ -138,19 +140,21 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     ["skip", () => context.player.skip()],
     ["auto", () => controller.toggleAuto()],
     ["fast", () => controller.toggleFastForward()],
-    ...(sequence
-      ? ([
-          ["continuous", () => sequence.toggleContinuous()],
-          ["interrupt", () => sequence.interrupt()],
-        ] as const)
+    ...(sequence && sequence.supportsContinuousPlay !== false
+      ? ([["continuous", () => sequence.toggleContinuous()]] as const)
       : []),
+    ...(sequence ? ([["interrupt", () => sequence.interrupt()]] as const) : []),
     ["log", () => controller.open("backlog")],
-    ["fullscreen", () => (adapter ? adapter.toggleFullscreen() : context.root.requestFullscreen?.())],
+    ["fullscreen", () => (adapter ? adapter.toggleFullscreen() : document.fullscreenElement ? document.exitFullscreen() : context.root.requestFullscreen?.())],
     ["subtitles", () => controller.setSetting("subtitlesEnabled", !controller.snapshot().settings.subtitlesEnabled)],
     [
-      "save", async () => {
+      "save",
+      async () => {
         await controller.quickSave();
-        message(labels[haneokaUiLocale(controller.currentSettings?.uiLanguage ?? snapshot.settings.uiLanguage, document)].saved);
+        message(
+          labels[haneokaUiLocale(controller.currentSettings?.uiLanguage ?? snapshot.settings.uiLanguage, document)]
+            .saved,
+        );
       },
     ],
     ["load", () => controller.open("load")],
@@ -158,7 +162,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     ["settings", () => controller.open("settings")],
     ["replay", () => controller.start()],
     [
-      "hide", () => {
+      "hide",
+      () => {
         context.root.dataset.vegaUiHidden = "true";
       },
     ],
@@ -183,7 +188,8 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     button.style.gap = "8px";
     const label = document.createElement("span");
     label.className = "haneoka-control-label";
-    const source = HANEOKA_CONTROL_ASSETS[(action === "settings" ? "more" : action) as keyof typeof HANEOKA_CONTROL_ASSETS];
+    const source =
+      HANEOKA_CONTROL_ASSETS[(action === "settings" ? "more" : action) as keyof typeof HANEOKA_CONTROL_ASSETS];
     if (source) {
       const icon = document.createElement("img");
       icon.src = source;
@@ -291,15 +297,16 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     "pointerdown",
     (event) => {
       if (event.button !== 0) return;
+      menu.setPointerCapture(event.pointerId);
       pressed = true;
       animatePress(true);
     },
     { signal: events.signal },
   );
-  document.addEventListener("pointerup", releasePress, {
+  context.root.addEventListener("pointerup", releasePress, {
     signal: events.signal,
   });
-  document.addEventListener(
+  context.root.addEventListener(
     "pointerdown",
     (event) => {
       if (!expanded || root.contains(event.target as Node)) return;
@@ -308,7 +315,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     },
     { signal: events.signal },
   );
-  document.addEventListener(
+  context.root.addEventListener(
     "keydown",
     (event) => {
       if (!expanded || event.key !== "Escape") return;
@@ -318,7 +325,7 @@ export function mountHaneokaControls(host: HTMLElement, context: VegaUiSlotConte
     },
     { signal: events.signal },
   );
-  document.addEventListener("pointercancel", releasePress, {
+  context.root.addEventListener("pointercancel", releasePress, {
     signal: events.signal,
   });
   menu.addEventListener(

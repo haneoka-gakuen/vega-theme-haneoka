@@ -1,3 +1,4 @@
+import { createTalkPortrait } from "@haneoka/vega/web/ui";
 import type { VegaWebUiSlotContext as VegaUiSlotContext } from "@haneoka/vega/web/ui";
 import { bindHaneokaViewport } from "./viewport.js";
 import { createAdvTextRenderValue, type VegaDisposable } from "@haneoka/vega/plugin";
@@ -19,6 +20,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
   fontBank.uiLanguage = root.lang;
   root.setAttribute("aria-live", "polite");
   host.append(root);
+  const portrait = createTalkPortrait(root, context);
   const viewport = bindHaneokaViewport(host, context);
   const richText = createHaneokaRichTextPresenter(
     context.services(VEGA_RICH_TEXT_SERVICE),
@@ -222,6 +224,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
           talk.textFormat,
           talk.textDisplayMode,
           talk.speaker,
+          talk.portraitRef,
           talk.speakerLang,
           talk.textComplete,
           state.autoPlay,
@@ -244,6 +247,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
         progress.value = state.preload.total ? state.preload.done / state.preload.total : 0;
         error.hidden = !state.error;
         error.textContent = state.error || "";
+        portrait.update();
         if (state.seeking) return;
         const restored = seekRevision !== context.player.seekRevision;
         seekRevision = context.player.seekRevision;
@@ -374,6 +378,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
     dispose() {
       disposed = true;
       viewport.dispose();
+      portrait.dispose();
       document.defaultView?.cancelAnimationFrame(frame);
       events.abort();
       textSelection.dispose();
