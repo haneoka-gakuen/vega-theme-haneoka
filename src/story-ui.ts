@@ -30,6 +30,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
     events = new AbortController();
   const centerBackdrop = document.createElement("div");
   centerBackdrop.className = "haneoka-center-talk-backdrop";
+  centerBackdrop.dataset.vegaFrameDialogue = "";
   centerBackdrop.hidden = true;
   centerBackdrop.setAttribute("aria-hidden", "true");
   root.insertBefore(centerBackdrop, phoneRoot());
@@ -88,6 +89,7 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
         scene.root.hidden = true;
         scenes.set(key, scene);
         root.insertBefore(scene.root, phoneRoot());
+        if (["default", "center", "psych", "subtitles"].includes(key)) scene.root.dataset.vegaFrameDialogue = "";
         if (["default", "center", "psych"].includes(key)) {
           scene.root.dataset.window = key;
           scene.root.tabIndex = 0;
@@ -97,6 +99,8 @@ export const mountHaneokaStoryUi = (host: HTMLElement, context: VegaUiSlotContex
           scene.root.addEventListener("click", advance, {
             signal: events.signal,
           });
+          for (const name of ["TalkNextIndicator", "AutoIcon", "FastIcon"])
+            for (const indicator of scene.all(name)) indicator.dataset.vegaFrameExclude = "";
           scene.root.addEventListener(
             "keydown",
             (event) => {

@@ -262,6 +262,7 @@ interface PhoneElements {
 
 const createPhone = (document: Document): PhoneElements => {
   const root = node(document, "section", "haneoka-phone");
+  root.dataset.vegaFrameDialogue = "";
   root.hidden = true;
   root.setAttribute("aria-label", "Story phone");
 
