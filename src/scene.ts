@@ -98,6 +98,7 @@ function spriteUrl(
   if (promise) return promise;
   promise = new Promise<string>((resolve, reject) => {
     const img = document.createElement("img");
+    img.crossOrigin = "anonymous";
     img.onload = () => {
       try {
         const canvas = document.createElement("canvas");
@@ -139,7 +140,7 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
   root.className = "haneoka-scene";
   root.dataset.scene = name;
   // Native camera bounds clip oversized gradients without creating a scroll box.
-  root.style.cssText = "position:absolute;inset:0;overflow:clip;pointer-events:none";
+  root.style.cssText = "position:absolute;inset:0;margin:0;overflow:clip;pointer-events:none";
   const elements = new Map<string, HTMLElement>();
   const definitions = new Map<string, SceneNode>();
   let disposed = false;
@@ -162,6 +163,7 @@ export function createHaneokaScene(document: Document, data: HaneokaSceneData, n
     const [min, max, pos, size, pivot] = definition.rect;
     const style = element.style;
     style.position = "absolute";
+    style.margin = "0";
     style.boxSizing = "border-box";
     if (definition.minWidth !== undefined) style.minWidth = pixel(definition.minWidth);
     if (definition.opacity !== undefined) style.opacity = String(definition.opacity);
